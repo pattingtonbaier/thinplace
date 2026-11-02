@@ -1,0 +1,12 @@
+{
+  "name": "thinplace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thinplace: a private, gentle life RPG in an inked Irish-folklore world.",
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  }
+}
