@@ -34,6 +34,7 @@ const PLOT: Record<string, [number, number]> = {
 };
 const FIRE: Pt = [15, 16];
 const SPAWN: Pt = [17, 18];
+const HARBOUR_J = 28;
 const riverX = (j: number) => 31.2 + 1.5 * Math.sin(j / 4.2) + 0.6 * Math.sin(j / 1.7);
 
 // 0 ground, 1 water, 2 path, 3 bridge, 4 field
@@ -41,7 +42,7 @@ const T: number[][] = [...Array(N)].map(() => Array(N).fill(0));
 const B: boolean[][] = [...Array(N)].map(() => Array(N).fill(false)); // scenery and buildings
 let W: boolean[][] = [...Array(N)].map(() => Array(N).fill(false)); // the palisade
 type Bld = { type: "bld"; id: BuildingId; ci: number; cj: number; door: Pt; depth: number; bbox?: number[] };
-type Prop = { type: "prop"; kind: "cart" | "woodpile" | "haystack" | "barrel"; i: number; j: number; depth: number };
+type Prop = { type: "prop"; kind: "cart" | "woodpile" | "haystack" | "barrel" | "boathouse" | "nets" | "boat"; i: number; j: number; depth: number };
 type Obj = Bld | Prop
   | { type: "pine" | "dpine" | "round"; i: number; j: number; v: number; depth: number }
   | { type: "fire"; depth: number };
@@ -71,7 +72,7 @@ function bfs(s: Pt, g: Pt, ok: (i: number, j: number) => boolean, diag = true): 
   const rnd = mul(20261102);
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     if (((i + 0.5 - 3.6) / 2.4) ** 2 + ((j + 0.5 - 15) / 3.2) ** 2 < 1) { T[i][j] = 1; B[i][j] = true; }
-    if (Math.abs(i + 0.5 - riverX(j)) < 1.25) { T[i][j] = 1; B[i][j] = true; }
+    if (Math.abs(i + 0.5 - riverX(j)) < 1.6) { T[i][j] = 1; B[i][j] = true; }
   }
   B[FIRE[0]][FIRE[1]] = true; objs.push({ type: "fire", depth: FIRE[0] + FIRE[1] + 1 });
   for (const b of BUILDINGS) {
@@ -87,6 +88,17 @@ function bfs(s: Pt, g: Pt, ok: (i: number, j: number) => boolean, diag = true): 
   }
   // the east road, over the river to the Old Roads
   for (let i = SPAWN[0]; i < N; i++) { const j = 18; if (T[i][j] === 1) { T[i][j] = 3; B[i][j] = false; } else if (!B[i][j]) T[i][j] = 2; }
+  // a little harbour on the west bank: a jetty, a boathouse, nets drying, boats tied up
+  {
+    const hj = HARBOUR_J;
+    let iw = 0; while (iw < N && T[iw][hj] !== 1) iw++;
+    T[iw][hj] = 5; B[iw][hj] = false;
+    (bfs([iw - 1, 18], [iw - 1, hj], (i, j) => !B[i][j], false) ?? []).forEach(([i, j]) => { if (T[i][j] === 0 || T[i][j] === 4) T[i][j] = 2; });
+    const put = (i: number, j: number, kind: Prop["kind"], di = 0.5, dj = 0.5) => { B[i][j] = true; objs.push({ type: "prop", kind, i: i + di, j: j + dj, depth: i + j + 1 }); };
+    put(iw - 1, hj - 2, "boathouse"); put(iw - 1, hj + 2, "nets"); put(iw - 2, hj + 1, "barrel");
+    objs.push({ type: "prop", kind: "boat", i: iw + 0.5, j: hj - 0.75, depth: iw + hj });
+    objs.push({ type: "prop", kind: "boat", i: iw + 0.55, j: hj + 1.3, depth: iw + hj + 2 });
+  }
   for (const [i0, j0, w, h] of [[11, 23, 3, 3], [27, 22, 2, 4], [19, 2, 4, 2]] as [number, number, number, number][])
     for (let i = i0; i < i0 + w; i++) for (let j = j0; j < j0 + h; j++) if (inb(i, j) && T[i][j] === 0 && !B[i][j]) T[i][j] = 4;
   const nearPlot = (i: number, j: number) => Object.values(PLOT).some(([a, b]) => i >= a - 1 && i <= a + 2 && j >= b - 1 && j <= b + 3);
@@ -96,6 +108,7 @@ function bfs(s: Pt, g: Pt, ok: (i: number, j: number) => boolean, diag = true): 
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     if (B[i][j] || T[i][j] !== 0 || Math.hypot(i - 16, j - 17) < 3.5 || nearPlot(i, j)) continue;
     if (nextToPath(i, j) && rnd() < 0.7) continue;
+    if (Math.abs(i + 0.5 - riverX(j)) < 3.2 && rnd() < 0.75) continue; // keep the river banks open so the water shows
     const edge = Math.min(i, j, N - 1 - i, N - 1 - j);
     const beyondRiver = i > riverX(j) + 1;
     const forest = edge < 4 || beyondRiver || (i < 10 && j < 10 && !(i > 4 && i < 10 && j > 3 && j < 9));
@@ -221,7 +234,7 @@ function buildGround() {
   const tile = (i: number, j: number, fill: string) => { const q = [P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)]; c.beginPath(); q.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fillStyle = fill; c.fill(); };
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     if (T[i][j] === 2 || T[i][j] === 3) tile(i, j, PATH);
-    if (T[i][j] === 1) tile(i, j, WATER);
+    if (T[i][j] === 1 || T[i][j] === 5) tile(i, j, WATER);
     if (T[i][j] === 4) tile(i, j, "#e8e4da");
   }
   // a faint grid, like a surveyor's sheet
@@ -231,7 +244,7 @@ function buildGround() {
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     if (T[i][j] === 1) {
       for (let n = 0; n < 3; n++) { const [x, y] = P(i + 0.2 + rnd() * 0.6, j + 0.2 + rnd() * 0.6); line(c, [[x - 6, y], [x - 2, y - 1.5], [x + 2, y], [x + 6, y - 1.5]], 1.3, "#6d6862"); }
-      for (const [a, b, p1, p2] of edges(i, j)) if (inb(i + a, j + b) && T[i + a][j + b] !== 1 && T[i + a][j + b] !== 3) {
+      for (const [a, b, p1, p2] of edges(i, j)) if (inb(i + a, j + b) && T[i + a][j + b] !== 1 && T[i + a][j + b] !== 3 && T[i + a][j + b] !== 5) {
         line(c, [P(...p1), P(...p2)], 2.4);
         for (let q = 0; q < 2; q++) { const u = 0.25 + q * 0.5, [x, y] = P(p1[0] + (p2[0] - p1[0]) * u, p1[1] + (p2[1] - p1[1]) * u); line(c, [[x, y], [x - 1, y - 7], [x + 1, y - 10]], 1.1, "#6d6862"); }
       }
@@ -251,6 +264,15 @@ function buildGround() {
     for (let u = 0.2; u < 1; u += 0.2) line(c, [P(i + u, j + 0.1, 4), P(i + u, j + 0.9, 4)], 0.9, "#8d887f");
     poly(c, [P(i, j + 0.9, 4), P(i + 1, j + 0.9, 4), P(i + 1, j + 0.9, 0), P(i, j + 0.9, 0)], "#aaa59d", 1.4);
     for (const v of [0.1, 0.9]) line(c, [P(i, j + v, 14), P(i + 1, j + v, 14)], 1.8);
+  }
+  // the jetty: planks on posts, running out into the river
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (T[i][j] === 5) {
+    line(c, [P(i, j), P(i, j + 1)], 2.4);
+    for (const u of [0.35, 0.95]) for (const v of [0.28, 0.72]) { const [x, y] = P(i + u, j + v); line(c, [[x, y + 4], [x, y - 6]], 3.2); ellipse(c, x, y + 4, 4, 1.6, "rgba(60,56,52,.25)"); }
+    poly(c, [P(i - 0.05, j + 0.25, 5), P(i + 1, j + 0.25, 5), P(i + 1, j + 0.75, 5), P(i - 0.05, j + 0.75, 5)], "#e3dfd8", 1.8);
+    for (let u = 0.12; u < 1; u += 0.14) line(c, [P(i + u, j + 0.25, 5), P(i + u, j + 0.75, 5)], 0.9, "#8d887f");
+    poly(c, [P(i - 0.05, j + 0.75, 5), P(i + 1, j + 0.75, 5), P(i + 1, j + 0.75, 1), P(i - 0.05, j + 0.75, 1)], "#aaa59d", 1.4);
+    const [bx, by] = P(i + 0.92, j + 0.3, 5); line(c, [[bx, by], [bx, by - 7]], 3.4); ellipse(c, bx, by - 7, 2.2, 1, "#55524d", 1);
   }
   poly(c, [P(0, 0), P(N, 0), P(N, N), P(0, N)], null, 2.6);
   ground = cv;
@@ -273,11 +295,19 @@ function drawBld(c: C, o: Bld, t: number, ws: WorldState) {
   const name = BUILDINGS.find((b) => b.id === id)!.name.replace(/^The /, "").toUpperCase();
   const [x, y] = P(ci, cj);
   if (!ws.open(id) && !previewAll) {
-    for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2 + t * 0.15, r = 26 + 6 * Math.sin(t * 0.7 + k); ellipse(c, x + Math.cos(a) * r * 1.4, y - 26 + Math.sin(a) * r * 0.6, 22, 15, "rgba(246,244,240,.92)", 1.4); }
-    ellipse(c, x, y - 28, 34, 20, "rgba(246,244,240,.96)");
-    c.font = "28px 'Patrick Hand SC',cursive"; c.fillStyle = "#8a8580"; c.textAlign = "center"; c.fillText("?", x, y - 18);
-    tag(c, x, y - 68, `LEVEL ${ws.level(id)}`, true);
-    o.bbox = [x - 70, y - 90, x + 70, y + 20];
+    // low mist lying over the ground, drifting; a little cairn marks the spot
+    const wisp = (wx: number, wy: number, w: number, h: number, a: number) => {
+      c.beginPath(); c.moveTo(wx - w, wy); c.quadraticCurveTo(wx - w * 0.3, wy - h * 1.3, wx + w * 0.1, wy - h * 0.7); c.quadraticCurveTo(wx + w * 0.6, wy - h * 1.2, wx + w, wy);
+      c.quadraticCurveTo(wx, wy + h * 0.45, wx - w, wy); c.fillStyle = `rgba(247,245,241,${a})`; c.fill();
+      c.beginPath(); c.moveTo(wx - w * 0.85, wy - h * 0.25); c.quadraticCurveTo(wx - w * 0.3, wy - h * 1.3, wx + w * 0.1, wy - h * 0.7); c.quadraticCurveTo(wx + w * 0.55, wy - h * 1.15, wx + w * 0.85, wy - h * 0.2);
+      c.strokeStyle = "rgba(30,28,26,.55)"; c.lineWidth = 1.3; c.lineCap = "round"; c.stroke();
+    };
+    for (let k = 0; k < 3; k++) { const p = P(ci - 0.3 + k * 0.3, cj + 0.5 - k * 0.4); ellipse(c, p[0], p[1] - 3 - k * 0.5, 7 - k * 1.2, 4 - k * 0.6, k % 2 ? "#cfcac2" : "#e3dfd8", 1.4); }
+    const L = [[-30, 6, 54, 10, .9], [34, 2, 48, 9, .9], [0, -6, 66, 11, .92], [-22, -18, 50, 10, .88], [26, -22, 44, 9, .86], [2, -34, 40, 8, .8], [-8, 14, 58, 8, .85]];
+    L.forEach(([dx, dy, w, h, a], k) => wisp(x + dx + Math.sin(t * 0.25 + k * 1.7) * 7, y - 14 + dy, w, h, a));
+    const cp = P(ci + 0.3, cj + 0.3); for (let k = 0; k < 3; k++) ellipse(c, cp[0], cp[1] - 14 - k * 7, 8 - k * 2, 4.5 - k, k % 2 ? "#cfcac2" : "#e3dfd8", 1.6);
+    tag(c, x, y - 74, `LEVEL ${ws.level(id)}`, true);
+    o.bbox = [x - 70, y - 96, x + 70, y + 20];
     return;
   }
   const { s, top } = buildingSprite(id, previewAll ? allRooms(id) : ws.rooms(id));
@@ -292,7 +322,64 @@ function drawProp(c: C, o: Prop) {
   if (o.kind === "cart") k.cart(0, 0);
   else if (o.kind === "haystack") k.haystack(0, 0);
   else if (o.kind === "barrel") { k.barrel(-0.15, 0); k.barrel(0.15, 0.15); }
+  else if (o.kind === "boat") drawBoat(c, o.i, o.j, 1, "row", 0);
+  else if (o.kind === "boathouse") {
+    k.shadow(0.42, 0.34);
+    k.walls(0.42, 0.34, 20, { front: "#e3dfd8", side: "#aaa59d", footing: 0 });
+    for (let u = -0.32; u < 0.42; u += 0.12) k.line([P(o.i + u, o.j + 0.34, 1), P(o.i + u, o.j + 0.34, 19)], 0.8, "#8d887f");
+    k.door(0.34, 0.08, 0.17, 16, false);
+    k.slate(0.42, 0.34, 20, 16, "#77736d");
+    k.lantern(-0.55, 0.45);
+  } else if (o.kind === "nets") {
+    for (const u of [-0.35, 0.35]) k.line([P(o.i + u, o.j, 0), P(o.i + u, o.j, 24)], 2.4);
+    k.line([P(o.i - 0.4, o.j, 22), P(o.i + 0.4, o.j, 22)], 2);
+    const top = [P(o.i - 0.33, o.j, 21), P(o.i + 0.33, o.j, 21)], bot = [P(o.i - 0.3, o.j, 6), P(o.i + 0.3, o.j, 4)];
+    k.poly([top[0], top[1], bot[1], bot[0]], "rgba(246,244,240,.6)", 1.3);
+    c.save(); c.beginPath(); [top[0], top[1], bot[1], bot[0]].forEach(([x, y], q) => (q ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.clip();
+    c.strokeStyle = "#6d6862"; c.lineWidth = 0.8; c.beginPath(); for (let d = -60; d < 60; d += 4) { c.moveTo(top[0][0] + d, top[0][1] - 30); c.lineTo(top[0][0] + d + 40, top[0][1] + 30); c.moveTo(top[0][0] + d + 40, top[0][1] - 30); c.lineTo(top[0][0] + d, top[0][1] + 30); } c.stroke(); c.restore();
+    k.ell(...P(o.i + 0.3, o.j + 0.35, 2), 6, 3, "#cfcac2", 1.2);
+  }
   else for (let r = 0; r < 3; r++) for (let q = 0; q < 4 - r; q++) { const p = P(o.i - 0.3 + q * 0.18 + r * 0.09, o.j, 3 + r * 5.5); k.ell(p[0], p[1], 3.2, 3.8, "#e9e6df", 1.2); k.ell(p[0], p[1], 1.4, 1.7, null, 0.7); }
+}
+
+// A small boat, bow pointing along the river (+j when dir is 1). Sails are paper; one pennant is red.
+function drawBoat(c: C, i: number, j: number, dir: number, kind: "sail" | "row", t: number) {
+  const bob = Math.sin(t * 1.8 + j * 2) * 1.2, rock = Math.sin(t * 1.3 + j) * 0.03;
+  const L = 0.72, Bm = 0.27, z = 6 + bob;
+  const at = (u: number, v: number, zz: number) => P(i + v, j + u * dir, zz);
+  const outline: [number, number][] = [[L, 0], [L * 0.45, Bm], [-L * 0.8, Bm * 0.9], [-L, Bm * 0.6], [-L, -Bm * 0.6], [-L * 0.8, -Bm * 0.9], [L * 0.45, -Bm]];
+  const [wx, wy] = P(i, j);
+  for (const r of [1, 1.6]) { c.beginPath(); c.ellipse(wx, wy + 2, 34 * r, 10 * r, 0, 0, 7); c.strokeStyle = `rgba(60,56,52,${0.35 / r})`; c.lineWidth = 1.1; c.stroke(); }
+  const top = outline.map(([u, v]) => at(u, v, z)), bot = outline.map(([u, v]) => at(u * 0.82, v * 0.6, bob));
+  for (let k = 0; k < outline.length; k++) {
+    const n = (k + 1) % outline.length, A = top[k], Bp = top[n];
+    poly(c, [A, Bp, bot[n], bot[k]], "#8f8a83", 1.4);
+  }
+  poly(c, top, "#d9d5ce", 2);
+  poly(c, outline.map(([u, v]) => at(u * 0.8, v * 0.75, z - 1)), "#efece6", 1);
+  for (const u of [-0.15, 0.15]) line(c, [at(u, -Bm * 0.7, z), at(u, Bm * 0.7, z)], 1.2, "#6d6862");
+  if (kind === "row") {
+    for (const s of [-1, 1]) line(c, [at(0, s * Bm * 0.9, z + 1), at(-0.25, s * (Bm + 0.32), bob)], 1.6);
+    return;
+  }
+  const m0 = at(0.15, 0, z), m1: Pt = [m0[0], m0[1] - 58];
+  line(c, [m0, m1], 2.2);
+  const s0: Pt = [m0[0], m0[1] - 6], tip: Pt = [m1[0], m1[1] + 2], aft = at(-0.6, 0, z + 9);
+  const sail: Pt[] = [tip, s0, [aft[0], aft[1]]];
+  poly(c, [tip, [s0[0] + (aft[0] - s0[0]) * 0.1 + Math.sin(t + j) * 1.5, s0[1]], aft], "#f7f5f1", 1.8);
+  hatch(c, sail, 5, "#c4bfb7", 0.8);
+  line(c, [s0, aft], 1.6);
+  const flap = Math.sin(t * 5 + j) * 2;
+  poly(c, [m1, [m1[0] - 9 * dir + flap * 0.3, m1[1] + 2 + flap * 0.5], [m1[0], m1[1] + 5]], RED, 1);
+}
+// Boats that sail the river, turning at the ends of their stretch (never under the bridge).
+const LANES = [{ a: 20.6, b: 34.2, speed: 0.32, kind: "sail" as const, off: 0.55, ph: 0 }, { a: 1.2, b: 16.4, speed: 0.26, kind: "sail" as const, off: 0.5, ph: 9 }, { a: 22, b: 33.5, speed: 0.4, kind: "row" as const, off: 0.6, ph: 20 }];
+function boatsAt(t: number) {
+  return LANES.map((L) => {
+    const span = L.b - L.a, s = (t * L.speed + L.ph) % (span * 2), fwd = s < span, j = fwd ? L.a + s : L.b - (s - span);
+    const i = riverX(j) + L.off;
+    return { type: "boat" as const, i, j, dir: fwd ? 1 : -1, kind: L.kind, depth: i + j + 0.3 };
+  });
 }
 
 function drawStake(c: C, s: Stake) {
@@ -351,12 +438,13 @@ function drawPlayer(c: C, t: number, look: GuiserOpts) {
 }
 
 function drawScene(ctx: C, t: number, cx: number, cy: number, VW: number, VH: number) {
-  const all: (Obj | Stake | { type: "player"; depth: number })[] = [...objs, ...stakes, { type: "player", depth: pl.i + pl.j }];
+  const all: (Obj | Stake | ReturnType<typeof boatsAt>[number] | { type: "player"; depth: number })[] = [...objs, ...stakes, ...boatsAt(t), { type: "player", depth: pl.i + pl.j }];
   all.sort((a, b) => a.depth - b.depth);
   for (const o of all) {
     if (o.type === "player") { drawPlayer(ctx, t, ws!.look); continue; }
     if (o.type === "fire") { drawFire(ctx, t, ws!); continue; }
     if (o.type === "bld") { drawBld(ctx, o, t, ws!); continue; }
+    if (o.type === "boat") { drawBoat(ctx, o.i, o.j, o.dir, o.kind, t); continue; }
     const [x, y] = P(o.i, o.j);
     if (x < cx - 140 || x > cx + VW + 140 || y < cy - 40 || y > cy + VH + 160) continue;
     if (o.type === "stake" || o.type === "gate") { drawStake(ctx, o); continue; }
