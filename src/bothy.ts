@@ -16,8 +16,8 @@ export const STATIONS: Station[] = [
   { id: "cauldron", room: "the Cauldron", at: [0.75, -1.9], name: "the Cauldron" },
   { id: "hearth", room: "the hearth", at: [-0.35, -1.85], name: "the hearth" },
   { id: "tobar", room: "the Tobar", at: [-1.0, -2.4], name: "the back door, out to the Tobar" },
-  { id: "nook", room: "the Scriptorium nook", at: [-2.15, -1.95], name: "the Scriptorium nook" },
-  { id: "loft", room: "the Dreaming Loft", at: [-0.45, -0.25], name: "the ladder to the Dreaming Loft" },
+  { id: "nook", room: "the Scriptorium nook", at: [-1.75, -1.55], name: "the Scriptorium, under the loft" },
+  { id: "loft", room: "the Dreaming Loft", at: [-1.95, 0.75], name: "the ladder to the Dreaming Loft" },
   { id: "seat", room: "the window seat", at: [-2.1, 1.65], name: "the window seat" },
   { id: "pen", room: "the familiars' pen", at: [2.2, 0.95], name: "the familiars' pen" },
   { id: "oak", room: "the Hollow Oak", at: [-0.05, 2.5], name: "the front door, out to the Hollow Oak" },
@@ -109,7 +109,7 @@ function drawShell(rooms: Rooms) {
   poly(WL, null, 2.8); poly(WR, null, 2.8);
   // a chalk sigil and Brigid's cross on the left wall
   {
-    const [bx, by] = P(-A, 0.95, 150);
+    const [bx, by] = P(-A, 2.7, 150);
     c.save(); c.translate(bx, by); c.transform(1, -0.5, 0, 1, 0, 0);
     for (const [dx, dy, w, h] of [[-3, -20, 6, 40], [-20, -3, 40, 6]] as [number, number, number, number][]) poly([[dx, dy], [dx + w, dy], [dx + w, dy + h], [dx, dy + h]], "#d7d0c1", 1.3);
     poly([[-6, -6], [6, -6], [6, 6], [-6, 6]], "#cfc6b2", 1.4); c.restore();
@@ -133,21 +133,12 @@ function drawShell(rooms: Rooms) {
     poly([P(-A, y0 - 0.06, z0), P(-A, y1 + 0.06, z0), P(-A + 0.24, y1 + 0.06, z0), P(-A + 0.24, y0 - 0.06, z0)], "#d9d5ce", 1.8);
     if (open("the window seat")) { const [cx, cy] = P(-A + 0.12, y0 + 0.2, z0); poly([[cx - 4, cy], [cx + 4, cy], [cx + 4, cy - 16], [cx - 4, cy - 16]], "#ece8e0", 1.4); }
   }
-  // the Scriptorium shelves: books and stoppered jars
-  {
-    const y0 = -2.7, y1 = -1.3, made = open("the Scriptorium nook");
-    for (const z of [10, 46, 82, 118]) {
-      poly([P(-A, y0, z), P(-A, y1, z), P(-A + 0.36, y1, z), P(-A + 0.36, y0, z)], "#cfcac2", 1.8);
-      if (z >= 118) continue;
-      if (!made) { dashed(() => poly([P(-A + 0.16, y0 + 0.2, z), P(-A + 0.16, y1 - 0.2, z), P(-A + 0.16, y1 - 0.2, z + 22), P(-A + 0.16, y0 + 0.2, z + 22)], null, 1.2, "#8d887f")); continue; }
-      let y = y0 + 0.06, k = 0;
-      while (y < y1 - 0.1) {
-        if ((k + z) % 5 === 3) { const [jx, jy] = P(-A + 0.18, y + 0.08, z); poly([[jx - 6, jy], [jx + 6, jy], [jx + 6, jy - 18], [jx - 6, jy - 18]], "rgba(225,230,229,.7)", 1.2); poly([[jx - 4, jy - 18], [jx + 4, jy - 18], [jx + 3, jy - 23], [jx - 3, jy - 23]], "#b8a98f", 1); y += 0.2; k++; continue; }
-        const w = 0.08 + h2(k, z) * 0.06, hh = 22 + h2(z, k) * 10, tone = ["#6f6b65", "#e3dfd8", "#9d988f", "#3a3733"][(k + z) % 4];
-        poly([P(-A + 0.16, y, z), P(-A + 0.16, y + w, z), P(-A + 0.16, y + w, z + hh), P(-A + 0.16, y, z + hh)], tone, 1.2); y += w + 0.01; k++;
-      }
-    }
-    for (const y of [y0, y1]) line([P(-A + 0.36, y, 10), P(-A + 0.36, y, 118)], 2);
+  // a chalk mark on the floor where each unmade room will be
+  for (const st of STATIONS) {
+    if (st.id === "desk" || st.id === "oak" || open(st.room)) continue;
+    const [x, y] = P(st.at[0], st.at[1] - 0.35);
+    c.save(); c.setLineDash([3, 4]); ell(x, y, 16, 8, null); c.lineWidth = 1.4; c.strokeStyle = "#8d887f"; c.stroke(); c.setLineDash([]);
+    c.font = `15px ${FELL_SC}`; c.fillStyle = "#7d7871"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("?", x, y); c.restore();
   }
   // the back door to the Tobar, rowan hung over it
   {
@@ -218,14 +209,13 @@ function things(rooms: Rooms, t: number): Thing[] {
       c.beginPath(); c.moveTo(cx - 24, cy - 16); c.quadraticCurveTo(cx - 28, cy + 14, cx, cy + 16); c.quadraticCurveTo(cx + 28, cy + 14, cx + 24, cy - 16); c.closePath(); c.fillStyle = "#3a3733"; c.fill(); c.lineWidth = 2.4; c.strokeStyle = "#d9d5ce"; c.stroke();
       ell(cx, cy - 16, 24, 6, "#5f5b55"); c.lineWidth = 2; c.strokeStyle = "#d9d5ce"; c.stroke();
       for (const dx of [-8, 6]) { const ph = (t * 0.5 + dx) % 1; line([[cx + dx, cy - 22], [cx + dx - 4 + Math.sin(t + dx) * 2, cy - 34], [cx + dx + 3, cy - 46 - ph * 6]], 1.6, "#bdb8b0"); }
-    } else dashed(() => { c.beginPath(); c.moveTo(cx - 24, cy - 16); c.quadraticCurveTo(cx - 28, cy + 14, cx, cy + 16); c.quadraticCurveTo(cx + 28, cy + 14, cx + 24, cy - 16); c.closePath(); c.lineWidth = 1.6; c.strokeStyle = "#cfcac2"; c.stroke(); });
+    }
     flameAt(c, ...P(0.75, -A + 0.45, 2), 1.2, t);
   } });
   // a broom against the hearth, once you've tidied
   out.push({ depth: -0.15 - 2.55, draw: () => {
     const a = P(-0.12, -2.5, 0), b = P(-0.05, -2.62, 110);
     if (open("the hearth")) { line([a, b], 3); poly([[a[0] - 10, a[1] + 2], [a[0] + 10, a[1] + 2], [a[0] + 6, a[1] - 26], [a[0] - 6, a[1] - 26]], "#d7d0c1", 1.8); for (let k = -3; k <= 3; k++) line([[a[0] + k * 2, a[1]], [a[0] + k * 1.6, a[1] - 24]], 0.8, "#8f897d"); }
-    else dashed(() => line([a, b], 1.6, "#8d887f"));
   } });
   // the turf basket
   out.push({ depth: 1.85 - 1.3, draw: () => { const [tx, ty] = P(1.85, -1.3); poly([[tx - 18, ty - 24], [tx + 18, ty - 24], [tx + 14, ty], [tx - 14, ty]], "#bdb8b0", 2); for (let k = 0; k < 3; k++) poly([[tx - 12 + k * 9, ty - 34], [tx - 4 + k * 9, ty - 34], [tx - 4 + k * 9, ty - 24], [tx - 12 + k * 9, ty - 24]], "#5f5b55", 1.2); } });
@@ -245,33 +235,57 @@ function things(rooms: Rooms, t: number): Thing[] {
       const [bx, by] = P(-A + 0.3, 2.0, 38); poly([[bx - 12, by - 4], [bx + 10, by - 8], [bx + 14, by], [bx - 8, by + 4]], "#6f6b65", 1.4);
     }
   } });
-  // the loft: posts, platform, straw tick and blanket; a ladder once you've slept well
-  out.push({ depth: -1.5, draw: () => {
-    const x0 = -A, x1 = -1.75, y0 = -A, y1 = 0.25, z = 192, made = open("the Dreaming Loft");
-    for (const y of [y0 + 0.08, y1 - 0.08]) poly([P(x1 - 0.05, y - 0.05, 0), P(x1 + 0.05, y - 0.05, 0), P(x1 + 0.05, y - 0.05, z), P(x1 - 0.05, y - 0.05, z)], "#8d887f", 1.8);
-    box(x0, x1, y0, y1, z - 12, z, "#d9d5ce", "#9d988f", "#8d887f", 2.4, true);
-    for (let u = x0 + 0.25; u < x1; u += 0.25) line([P(u, y0, z), P(u, y1, z)], 0.9, "#9d988f");
-    if (made) {
-      box(-A + 0.12, -A + 1.0, -A + 0.2, -A + 1.9, z, z + 12, "#ece8e0", "#e3dfd8", "#cfcac2", 1.8, false);
-      const Bl: Pt[] = [P(-A + 0.12, -A + 0.9, z + 13), P(-A + 1.02, -A + 0.9, z + 13), P(-A + 1.02, -A + 1.92, z + 13), P(-A + 0.12, -A + 1.92, z + 13)];
-      poly(Bl, "#9d988f", 1.8); hatch(Bl, 5, "#6f6b65"); ell(...P(-A + 0.6, -A + 0.45, z + 18), 16, 8, WHITE, 1.6);
+  // the Scriptorium: one built-in bookcase under the loft, and a lectern with a candle
+  out.push({ depth: -2.4 - 2.8, draw: () => {
+    if (!open("the Scriptorium nook")) return;
+    const x0 = -2.88, x1 = -1.98, y0 = -A, y1 = -A + 0.32, top = 168;
+    box(x0, x1, y0, y1, 0, top, "#bdb8b0", "#8d887f", "#6f6b65", 2.4, true);
+    for (const z of [8, 48, 88, 128]) {
+      poly([P(x0 + 0.06, y1, z), P(x1 - 0.06, y1, z), P(x1 - 0.06, y1, z + 34), P(x0 + 0.06, y1, z + 34)], "#3a3733", 1.4);
+      let x = x0 + 0.1, k = 0;
+      while (x < x1 - 0.14) {
+        if ((k + z) % 6 === 4) { const [jx, jy] = P(x + 0.08, y1, z); poly([[jx - 6, jy], [jx + 6, jy], [jx + 6, jy - 20], [jx - 6, jy - 20]], "rgba(225,230,229,.85)", 1.2); poly([[jx - 4, jy - 20], [jx + 4, jy - 20], [jx + 3, jy - 25], [jx - 3, jy - 25]], "#b8a98f", 1); x += 0.18; k++; continue; }
+        const w = 0.07 + h2(k, z) * 0.05, hh = 22 + h2(z, k) * 9, tone = ["#e3dfd8", "#9d988f", "#cfcac2", "#6f6b65"][(k + z) % 4];
+        poly([P(x, y1, z), P(x + w, y1, z), P(x + w, y1, z + hh), P(x, y1, z + hh)], tone, 1.1); x += w + 0.012; k++;
+      }
     }
-    const lx = x1 + 0.02, ly0 = -0.55, ly1 = 0.0;
-    const foot = (y: number): Pt => P(lx + 0.75, y, 0), head = (y: number): Pt => P(lx, y, z + 18);
-    const draw = () => { line([foot(ly0), head(ly0)], 3); line([foot(ly1), head(ly1)], 3); for (let k = 1; k < 9; k++) { const q = k / 9, a = foot(ly0), b = head(ly0), cc = foot(ly1), d = head(ly1); line([[a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q], [cc[0] + (d[0] - cc[0]) * q, cc[1] + (d[1] - cc[1]) * q]], 2.2); } };
-    if (made) draw(); else dashed(draw);
   } });
-  // the familiars' pen: a basket and a curled cat, or a pencilled outline
-  out.push({ depth: 2.25 + 0.95, draw: () => {
-    const [bx, by] = P(2.25, 0.95);
-    if (open("the familiars' pen")) {
-      ell(bx, by - 4, 36, 15, "#bdb8b0", 2.2); ell(bx, by - 10, 30, 11, "#8d887f", 1.6);
-      for (let k = -3; k <= 3; k++) line([[bx + k * 9, by + 6], [bx + k * 9 + 3, by - 10]], 0.9, "#6d6862");
-      ell(bx, by - 14, 20, 9, "#3a3733", 1.6); ell(bx + 15, by - 18, 8, 7, "#3a3733", 1.6);
-      poly([[bx + 11, by - 23], [bx + 13, by - 30], [bx + 16, by - 24]], "#3a3733", 1); poly([[bx + 17, by - 23], [bx + 20, by - 29], [bx + 21, by - 22]], "#3a3733", 1);
-      const breathe = Math.sin(t * 1.4) * 0.8; line([[bx - 18, by - 12], [bx - 22, by - 4 + breathe], [bx - 8, by - 6]], 2.2, "#3a3733");
-    } else dashed(() => { c.beginPath(); c.ellipse(bx, by - 6, 36, 15, 0, 0, Math.PI * 2); c.strokeStyle = "#8d887f"; c.lineWidth = 1.4; c.stroke(); });
+  out.push({ depth: -2.35 - 2.2, draw: () => {
+    if (!open("the Scriptorium nook")) return;
+    const [lx, ly] = P(-2.35, -2.2);
+    line([[lx, ly], [lx, ly - 46]], 4); poly([[lx - 14, ly], [lx + 14, ly], [lx + 10, ly - 4], [lx - 10, ly - 4]], "#6f6b65", 1.6);
+    poly([[lx - 26, ly - 46], [lx + 26, ly - 58], [lx + 30, ly - 50], [lx - 22, ly - 38]], "#8d887f", 2);
+    poly([[lx - 22, ly - 48], [lx + 2, ly - 54], [lx + 4, ly - 48], [lx - 20, ly - 42]], "#efe8da", 1.2); poly([[lx + 2, ly - 54], [lx + 24, ly - 59], [lx + 26, ly - 53], [lx + 4, ly - 48]], "#efe8da", 1.2);
+    const [cx, cy] = P(-2.0, -2.45); poly([[cx - 4, cy], [cx + 4, cy], [cx + 4, cy - 18], [cx - 4, cy - 18]], "#ece8e0", 1.4); ell(cx, cy, 8, 3, "#5f5b55", 1.2);
+    flameAt(c, cx, cy - 20, 0.35, t);
   } });
+  // a kist against the wall under the loft
+  out.push({ depth: -2.8 - 1.25, draw: () => { box(-A, -2.6, -1.6, -0.95, 0, 30, "#9d988f", "#8d887f", "#6f6b65", 2.2, true); line([P(-A, -1.28, 30), P(-2.6, -1.28, 30)], 1.4, "#3d3934"); } });
+  // the Dreaming Loft: a lochta over the back corner with a rail and a blanket over it; the ladder once you've slept well
+  out.push({ depth: -1.9 - 0.3, draw: () => {
+    const x0 = -A, x1 = -1.9, y0 = -A, y1 = -0.3, z = 200, made = open("the Dreaming Loft");
+    for (const y of [y0 + 0.1, y1 - 0.1]) poly([P(x1 - 0.06, y - 0.06, 0), P(x1 + 0.06, y - 0.06, 0), P(x1 + 0.06, y - 0.06, z), P(x1 - 0.06, y - 0.06, z)], "#8d887f", 1.8);
+    box(x0, x1, y0, y1, z - 14, z, "#d9d5ce", "#9d988f", "#8d887f", 2.4, true);
+    if (made) {
+      box(-A + 0.1, -A + 0.85, -A + 0.15, -A + 1.75, z, z + 12, "#ece8e0", "#e3dfd8", "#cfcac2", 1.8, false);
+      const Bl: Pt[] = [P(-A + 0.1, -A + 0.8, z + 13), P(-A + 0.87, -A + 0.8, z + 13), P(-A + 0.87, -A + 1.77, z + 13), P(-A + 0.1, -A + 1.77, z + 13)];
+      poly(Bl, "#9d988f", 1.8); hatch(Bl, 5, "#6f6b65"); ell(...P(-A + 0.5, -A + 0.42, z + 18), 15, 7, WHITE, 1.6);
+    }
+    // the rail along the open edges
+    for (const [a, b] of [[P(x1, y0 + 0.1, z), P(x1, y1, z)], [P(x1, y1, z), P(x0 + 0.05, y1, z)]] as [Pt, Pt][]) {
+      line([[a[0], a[1] - 24], [b[0], b[1] - 24]], 3); for (let u = 0; u <= 1.001; u += 0.2) { const x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u; line([[x, y], [x, y - 24]], 1.8); }
+    }
+    if (made) { // a blanket thrown over the rail
+      const Bk: Pt[] = [P(x1 + 0.02, -2.1, z + 26), P(x1 + 0.02, -1.25, z + 26), P(x1 + 0.02, -1.3, z - 34), P(x1 + 0.02, -1.55, z - 26), P(x1 + 0.02, -1.8, z - 38), P(x1 + 0.02, -2.05, z - 28)];
+      poly(Bk, "#8d887f", 2); hatch(Bk, 4, "#5f5b55"); line([P(x1 + 0.02, -2.08, z + 14), P(x1 + 0.02, -1.27, z + 14)], 1.4, "#e3dfd8");
+      const lx = -2.25, foot = (dx: number): Pt => P(lx + dx, 0.45, 0), head = (dx: number): Pt => P(lx + dx, y1, z + 24);
+      const L0 = -0.18, L1 = 0.18;
+      line([foot(L0), head(L0)], 3); line([foot(L1), head(L1)], 3);
+      for (let k = 1; k < 9; k++) { const q = k / 9, a = foot(L0), b = head(L0), cc = foot(L1), d = head(L1); line([[a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q], [cc[0] + (d[0] - cc[0]) * q, cc[1] + (d[1] - cc[1]) * q]], 2.2); }
+    }
+  } });
+  // the familiars' pen: drawn for whatever kind of familiar you keep
+  if (open("the familiars' pen")) out.push({ depth: 2.25 + 0.95, draw: () => drawPen(c, familiar, ...P(2.25, 0.95), t) });
   return out;
 }
 function drawFront() {
@@ -286,8 +300,8 @@ function drawFront() {
 
 // ---------- walking ----------
 const blockers: [number, number, number, number][] = [
-  [1.78, 2.9, -3, -2.35], [-0.02, 1.52, -3, -2.42], [-3, -2.6, -2.75, -1.25], [-3, -2.48, 0.85, 2.45],
-  [-1.85, -1.65, -3, -2.8], [-1.85, -1.65, 0.05, 0.3], [-1.15, -0.85, -0.65, 0.1], [1.65, 2.05, -1.5, -1.1], [2.05, 2.52, -2.25, -1.85],
+  [1.78, 2.9, -3, -2.35], [-0.02, 1.52, -3, -2.42], [-3, -2.48, 0.85, 2.45], [-2.9, -1.95, -3, -2.6], [-2.6, -2.1, -2.45, -1.95], [-3, -2.55, -1.65, -0.9],
+  [-2.02, -1.78, -3, -2.78], [-2.02, -1.78, -0.52, -0.28], [-2.5, -2.0, 0.3, 0.6], [1.65, 2.05, -1.5, -1.1], [2.05, 2.52, -2.25, -1.85],
 ];
 const G = 0.25, NG = 24; // walking grid
 const blockedAt = (x: number, y: number) => x < -2.85 || x > 2.85 || y < -2.85 || y > 2.85 || blockers.some(([a, b, cc, d]) => x > a && x < b && y > cc && y < d);
@@ -314,7 +328,9 @@ export function placeAt(id: string) { const s = STATIONS.find((x) => x.id === id
 
 export type BothyHooks = { arrive: (id: string) => void; near: (id: string | null) => void; tapStation: (id: string) => void };
 let raf = 0;
-export function attachBothy(cv: HTMLCanvasElement, rooms: Rooms, look: GuiserOpts, hooks: BothyHooks, labels: boolean) {
+let familiar: Familiar = "cat";
+export function attachBothy(cv: HTMLCanvasElement, rooms: Rooms, look: GuiserOpts, hooks: BothyHooks, labels: boolean, kind: Familiar = "cat") {
+  familiar = kind;
   cancelAnimationFrame(raf);
   const DPR = Math.min(2, devicePixelRatio || 1);
   const ctx = cv.getContext("2d")!;
@@ -380,4 +396,45 @@ export function attachBothy(cv: HTMLCanvasElement, rooms: Rooms, look: GuiserOpt
   };
   raf = requestAnimationFrame(frame);
   hooks.near(near);
+}
+
+// ---------- familiars ----------
+export type Familiar = "cat" | "hound" | "hare" | "hen";
+export function drawPen(cc: C, kind: Familiar, bx: number, by: number, t: number) {
+  c = cc;
+  const D = "#3a3733", breathe = Math.sin(t * 1.4) * 0.8;
+  if (kind === "cat") { // a rush basket and a curled cat
+    ell(bx, by - 4, 36, 15, "#bdb8b0", 2.2); ell(bx, by - 10, 30, 11, "#8d887f", 1.6);
+    for (let k = -3; k <= 3; k++) line([[bx + k * 9, by + 6], [bx + k * 9 + 3, by - 10]], 0.9, "#6d6862");
+    ell(bx, by - 14 - breathe * 0.4, 20, 9 + breathe * 0.3, D, 1.6); ell(bx + 15, by - 18, 8, 7, D, 1.6);
+    poly([[bx + 11, by - 23], [bx + 13, by - 30], [bx + 16, by - 24]], D, 1); poly([[bx + 17, by - 23], [bx + 20, by - 29], [bx + 21, by - 22]], D, 1);
+    line([[bx - 18, by - 12], [bx - 22, by - 4 + breathe], [bx - 8, by - 6]], 2.2, D);
+  } else if (kind === "hound") { // a straw bed by the door and a water bowl
+    ell(bx, by - 2, 42, 16, "#d7d0c1", 2); for (let k = 0; k < 14; k++) line([[bx - 34 + h2(k, 1) * 66, by - 4 + h2(k, 2) * 10], [bx - 28 + h2(k, 3) * 60, by - 8 + h2(k, 4) * 10]], 0.8, "#8f897d");
+    ell(bx - 4, by - 12 - breathe * 0.4, 26, 10, "#9d988f", 1.8);
+    ell(bx + 22, by - 17, 11, 9, "#9d988f", 1.8); ell(bx + 33, by - 13, 8, 5, "#9d988f", 1.6); ell(bx + 40, by - 14, 2.4, 2, D);
+    poly([[bx + 16, by - 22], [bx + 12, by - 6], [bx + 18, by - 4], [bx + 22, by - 20]], "#6f6b65", 1.2); ell(bx + 26, by - 19, 1.4, 1.4, D);
+    line([[bx + 8, by - 6], [bx + 30, by - 6]], 2, "#9d988f");
+    line([[bx - 28, by - 10], [bx - 40, by - 2]], 2.4, "#9d988f");
+    ell(bx + 52, by + 8, 11, 5, "#cfcac2", 1.6); ell(bx + 52, by + 7, 7, 2.6, "#6f6b65");
+  } else if (kind === "hare") { // a hutch with a hazel latch
+    const W2 = 40, Hh = 34;
+    poly([[bx - W2, by], [bx + W2, by], [bx + W2, by - Hh], [bx - W2, by - Hh]], "#cfcac2", 2.2);
+    poly([[bx - W2 - 4, by - Hh], [bx + W2 + 4, by - Hh], [bx + W2 - 2, by - Hh - 12], [bx - W2 + 2, by - Hh - 12]], "#8d887f", 2);
+    clipTo([[bx - W2 + 6, by - 4], [bx + 6, by - 4], [bx + 6, by - Hh + 4], [bx - W2 + 6, by - Hh + 4]], () => {
+      ell(bx - 16, by - 12, 12, 8, "#9d988f", 1.4); ell(bx - 6, by - 18, 6, 5, "#9d988f", 1.4);
+      poly([[bx - 6, by - 22], [bx - 4, by - 38], [bx - 1, by - 22]], "#9d988f", 1.2); poly([[bx - 10, by - 22], [bx - 12, by - 37], [bx - 7, by - 22]], "#9d988f", 1.2); ell(bx - 3, by - 19, 1.4, 1.4, D);
+      for (let x = bx - W2 + 6; x < bx + 6; x += 6) line([[x, by - Hh + 4], [x, by - 4]], 0.7, "#5f5b55");
+      for (let y = by - Hh + 4; y < by - 4; y += 6) line([[bx - W2 + 6, y], [bx + 6, y]], 0.7, "#5f5b55");
+    });
+    line([[bx + 6, by - 4], [bx + 6, by - Hh + 4]], 2); line([[bx + 12, by - 18], [bx + 26, by - 18]], 2.4, "#8d7a62");
+  } else { // a nesting box and a scatter of grain
+    poly([[bx - 30, by], [bx + 30, by], [bx + 30, by - 30], [bx - 30, by - 30]], "#cfcac2", 2.2);
+    for (let k = -2; k <= 2; k++) line([[bx - 30, by - 30 + (k + 2) * 7], [bx + 30, by - 30 + (k + 2) * 7]], 0.8, "#8d887f");
+    ell(bx, by - 30, 26, 8, "#d7d0c1", 1.6);
+    ell(bx - 2, by - 40 - breathe * 0.3, 16, 11, "#ece8e0", 1.8); ell(bx + 12, by - 50, 7, 7, "#ece8e0", 1.6);
+    poly([[bx + 18, by - 50], [bx + 24, by - 48], [bx + 18, by - 46]], "#8d887f", 1); poly([[bx + 9, by - 57], [bx + 12, by - 62], [bx + 15, by - 57]], RED, 1); ell(bx + 14, by - 51, 1.4, 1.4, D);
+    poly([[bx - 18, by - 42], [bx - 28, by - 52], [bx - 22, by - 38]], "#ece8e0", 1.4);
+    for (let k = 0; k < 9; k++) ell(bx - 40 + h2(k, 5) * 30, by + 6 + h2(k, 6) * 8, 1.6, 1.1, "#8d7a62");
+  }
 }
