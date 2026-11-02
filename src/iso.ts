@@ -254,7 +254,7 @@ function drawBuilding(c: C, o: Extract<Obj, { type: "bld" }>, t: number, ws: Wor
   const { ci, cj, id } = o, dk = o.door[0] + 0.5;
   const name = BUILDINGS.find((b) => b.id === id)!.name.replace(/^The /, "").toUpperCase();
   ellipse(c, ...P(ci + 0.15, cj + 0.15), TW * 0.95, TH * 0.95, "rgba(120,114,106,.22)");
-  if (!ws.open(id)) {
+  if (!ws.open(id) && !previewAll) {
     // still in the fog
     const [x, y] = P(ci, cj);
     for (let k = 0; k < 7; k++) {
@@ -585,4 +585,5 @@ export function signOnScreen(id: BuildingId): [number, number] | null {
   const r = cv.getBoundingClientRect();
   return [(o.bbox[0] + o.bbox[2]) / 2 - cam.x + r.left, o.bbox[1] + 20 - cam.y + r.top];
 }
-(globalThis as any).__thinplace = { signOnScreen };
+let previewAll = false; // test-only: draw every building as if open
+(globalThis as any).__thinplace = { signOnScreen, drawAll: () => { previewAll = true; } };
