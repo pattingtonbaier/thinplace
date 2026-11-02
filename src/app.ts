@@ -2,7 +2,7 @@ import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
-  ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
+  type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
   type Action, type BuildingId, type Ember,
 } from "./content";
 import {
@@ -455,19 +455,48 @@ function lookSheet() {
   return sheetWrap("Your Scáth", lookPicker(st.s.profile!.look, st.s.profile!.calling, "look-") + `<button class="primary wide" data-act="close">Done</button>`);
 }
 
+// Is a hood or staff yours yet? Starting items always are; the rest are earned.
+function earned(it: { id: string; unlock: string; need?: Need }, calling: string): boolean {
+  const c = CALLING_BY_ID[calling];
+  if (it.unlock === "start") return true;
+  if (it.unlock === "calling") return c?.staff === it.id;
+  if (it.unlock === "samhain") return st.s.logs.some((l) => { if (l.deleted) return false; const d = new Date(l.ts); return (d.getMonth() === 9 && d.getDate() === 31) || (d.getMonth() === 10 && d.getDate() === 1); });
+  const n = it.need ?? {};
+  if (n.ember) return (st.d?.emberEarned?.[n.ember] ?? 0) >= (n.tier ?? 1) * 3;
+  if (n.level) return (st.d?.level ?? 1) >= n.level;
+  return false;
+}
+function howToEarn(it: { unlock: string; need?: Need }): string {
+  if (it.unlock === "samhain") return "log on Samhain, 31 Oct or 1 Nov";
+  const n = it.need ?? {};
+  if (n.ember) return `${EMBERS.find((e) => e.key === n.ember)!.name} tier ${n.tier ?? 1} · ${(n.tier ?? 1) * 3} points`;
+  if (n.level) return `reach level ${n.level}`;
+  return "";
+}
+
 function lookPicker(look: Profile["look"], calling: string, prefix: string) {
   const c = CALLING_BY_ID[calling];
   const satchels = SATCHELS.filter((b) => b.id === "satchel" || b.id === "sack" || b.id === c?.satchel);
-  const staves = STAVES.filter((x) => x.unlock === "start" || x.id === c?.staff);
-  const hoods = HOODS.filter((h) => h.unlock === "start");
-  const pick = (kind: string, items: { id: string; name: string }[], cur: string, sw?: (id: string) => string) =>
-    `<p class="label">${kind}</p><div class="chips wrap" role="radiogroup">${items.map((it) => `<button class="chip ${cur === it.id ? "on" : ""}" role="radio" aria-checked="${cur === it.id}" data-act="${prefix}${kind.toLowerCase()}" data-arg="${it.id}">${sw ? sw(it.id) : ""}${esc(it.name)}</button>`).join("")}</div>`;
+  const staves = STAVES.filter((x) => x.unlock !== "calling" || x.id === c?.staff);
+  const hoods = HOODS;
+  type Item = { id: string; name: string; unlock?: string; need?: Need; note?: string };
+  const pick = (kind: string, items: Item[], cur: string, sw?: (id: string) => string) => {
+    const mine = items.filter((it) => !it.unlock || it.id === cur || earned(it as any, calling));
+    const locked = items.filter((it) => !mine.includes(it));
+    const chip = (it: Item, on: boolean) => `<button class="chip ${on ? "on" : ""}" role="radio" aria-checked="${on}" data-act="${prefix}${kind.toLowerCase()}" data-arg="${it.id}"${it.note ? ` title="${esc(it.note)}"` : ""}>${sw ? sw(it.id) : ""}${esc(it.name)}</button>`;
+    const lockChip = (it: Item) => `<span class="chip locked" title="${esc(`${it.name}: ${howToEarn(it as any)}`)}" aria-label="${esc(`${it.name}, locked. Earned by ${howToEarn(it as any)}`)}"><span class="nm">${sw ? sw(it.id) : ""}${esc(it.name)}</span><small>${esc(howToEarn(it as any))}</small></span>`;
+    return `<p class="label">${kind}</p><div class="chips wrap" role="radiogroup">${mine.map((it) => chip(it, cur === it.id)).join("")}</div>`
+      + (locked.length ? `<details class="locked-set"><summary>${locked.length} more to earn</summary><div class="chips wrap">${locked.map(lockChip).join("")}</div></details>` : "");
+  };
+  const stf = STAVES.find((x) => x.id === look.staff), hd = HOODS.find((h) => h.id === look.hood);
   return `<div class="lookgrid"><div class="preview">${guiser({ ...lookToOpts(look, 0.95), label: "Preview of your Scáth" })}</div><div>
     ${pick("Hood", hoods, look.hood, (id) => `<i class="sw" style="background:${HOODS.find((h) => h.id === id)!.hood}"></i>`)}
+    ${hd ? `<p class="quiet">${esc(hd.name)}: ${esc(hd.note)}.</p>` : ""}
     ${pick("Satchel", satchels, look.satchel)}
     ${pick("Staff", staves, look.staff)}
+    ${stf ? `<p class="quiet">${esc(stf.ogham ? `${stf.name} (${stf.ogham}): ${stf.meaning}.` : `${stf.name}: ${stf.meaning}.`)}</p>` : ""}
     ${pick("Glow", Object.keys(GLOWS).map((k) => ({ id: k, name: k[0].toUpperCase() + k.slice(1) })), look.glow, (id) => `<i class="sw" style="background:${GLOWS[id]}"></i>`)}
-    <p class="quiet">${esc(STAVES.find((x) => x.id === look.staff)?.ogham ? `${STAVES.find((x) => x.id === look.staff)!.name} (${STAVES.find((x) => x.id === look.staff)!.ogham}): ${STAVES.find((x) => x.id === look.staff)!.meaning}.` : `${STAVES.find((x) => x.id === look.staff)?.name ?? ""}: ${STAVES.find((x) => x.id === look.staff)?.meaning ?? ""}.`)} More dyes, staves and masks unlock as you grow.</p></div></div>`;
+    <p class="quiet">Change any of this whenever you like, from Me. Masks come later.</p></div></div>`;
 }
 
 function levelSheet(level: number) {

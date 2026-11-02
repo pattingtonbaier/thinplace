@@ -241,3 +241,10 @@ input::placeholder, textarea::placeholder { color: #8a8580; -webkit-text-fill-co
 .others { margin-top: 10px; }
 .others summary { cursor: pointer; text-decoration: underline wavy var(--rule); text-underline-offset: 4px; }
 .cairn { border-style: dashed; }
+
+.chip.locked { opacity: .55; border-style: dashed; cursor: default; flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 14px; }
+.chip.locked .nm { display: inline-flex; align-items: center; gap: 6px; }
+.chip.locked { border-radius: 14px; }
+.chip.locked small { font-size: .75em; color: var(--muted, #6d6862); }
+.locked-set { margin: 6px 0 10px; }
+.locked-set summary { cursor: pointer; color: var(--muted, #6d6862); font-size: .9em; }

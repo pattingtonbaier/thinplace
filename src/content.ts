@@ -126,18 +126,20 @@ export const ACTION_BY_ID: Record<string, Action> = Object.fromEntries(ACTIONS.m
 // Looks. Hoods are muted folk dyes from Irish wool-craft: mid-tones that stand out on grey ink
 // and never compete with the red. There is no red hood.
 export type Unlock = "start" | "calling" | "ember" | "milestone" | "samhain";
-export const HOODS: { id: string; name: string; hood: string; trim?: string; note: string; unlock: Unlock }[] = [
+// What earns an item: an ember tier (points earned by logging: 3, 6, 9) or a level.
+export type Need = { ember?: Ember; tier?: number; level?: number };
+export const HOODS: { id: string; name: string; hood: string; trim?: string; note: string; unlock: Unlock; need?: Need }[] = [
   { id: "ink", name: "Ink", hood: "#26231f", note: "bog-oak black", unlock: "start" },
   { id: "oatmeal", name: "Oatmeal", hood: "#cdbfa3", trim: "#6f6656", note: "undyed wool", unlock: "start" },
   { id: "peat", name: "Peat", hood: "#6a5444", trim: "#d9c9a8", note: "turf-smoke brown", unlock: "start" },
   { id: "woad", name: "Woad", hood: "#4c6680", trim: "#e6dcc4", note: "the old blue", unlock: "start" },
   { id: "bracken", name: "Bracken", hood: "#6f7a4c", trim: "#e6dcc4", note: "autumn fern green", unlock: "start" },
-  { id: "weld", name: "Weld", hood: "#c29a3e", trim: "#3d3529", note: "yellow-weed gold", unlock: "ember" },
-  { id: "crotal", name: "Crotal", hood: "#9a5f3a", trim: "#e6dcc4", note: "lichen rust", unlock: "ember" },
-  { id: "heather", name: "Heather", hood: "#76607e", trim: "#e2cf8c", note: "hillside purple", unlock: "ember" },
-  { id: "sloe", name: "Sloe", hood: "#4e3a4b", trim: "#c9b8cf", note: "blackthorn plum", unlock: "ember" },
-  { id: "seaholly", name: "Sea-holly", hood: "#7f9696", trim: "#2f3a3a", note: "grey-blue shore", unlock: "ember" },
-  { id: "moss", name: "Moss", hood: "#55684f", trim: "#d6b26a", note: "bog moss", unlock: "milestone" },
+  { id: "weld", name: "Weld", hood: "#c29a3e", trim: "#3d3529", note: "yellow-weed gold", unlock: "ember", need: { ember: "R", tier: 1 } },
+  { id: "crotal", name: "Crotal", hood: "#9a5f3a", trim: "#e6dcc4", note: "lichen rust", unlock: "ember", need: { ember: "B", tier: 1 } },
+  { id: "heather", name: "Heather", hood: "#76607e", trim: "#e2cf8c", note: "hillside purple", unlock: "ember", need: { ember: "E", tier: 1 } },
+  { id: "sloe", name: "Sloe", hood: "#4e3a4b", trim: "#c9b8cf", note: "blackthorn plum", unlock: "ember", need: { ember: "N", tier: 1 } },
+  { id: "seaholly", name: "Sea-holly", hood: "#7f9696", trim: "#2f3a3a", note: "grey-blue shore", unlock: "ember", need: { ember: "O", tier: 1 } },
+  { id: "moss", name: "Moss", hood: "#55684f", trim: "#d6b26a", note: "bog moss", unlock: "milestone", need: { level: 5 } },
   { id: "samhain", name: "Samhain", hood: "#2f2b29", trim: "#c97b3d", note: "guising soot and ember", unlock: "samhain" },
 ];
 export const SATCHELS = [
@@ -147,7 +149,7 @@ export const SATCHELS = [
   { id: "basket", name: "Basket", color: "#b08a52" },
 ];
 // Staves, mostly named for the trees of the Ogham alphabet.
-export const STAVES: { id: string; name: string; ogham?: string; meaning: string; wood: string; unlock: Unlock }[] = [
+export const STAVES: { id: string; name: string; ogham?: string; meaning: string; wood: string; unlock: Unlock; need?: Need }[] = [
   { id: "rowan", name: "Rowan", ogham: "Luis", meaning: "protection from enchantment", wood: "#a58463", unlock: "start" },
   { id: "hazel", name: "Hazel", ogham: "Coll", meaning: "wisdom", wood: "#b39674", unlock: "start" },
   { id: "ash", name: "Ash", ogham: "Nion", meaning: "journeys and the world-tree", wood: "#e2d8c4", unlock: "start" },
@@ -156,10 +158,10 @@ export const STAVES: { id: string; name: string; ogham?: string; meaning: string
   { id: "drift", name: "Driftwood", meaning: "what the sea gave back", wood: "#cfc9bd", unlock: "start" },
   { id: "crook", name: "Shepherd's crook", meaning: "tending", wood: "#a07e5c", unlock: "calling" },
   { id: "lantern", name: "Lantern staff", meaning: "seeing", wood: "#8c6a48", unlock: "calling" },
-  { id: "oak", name: "Oak", ogham: "Duir", meaning: "the door; steadfastness", wood: "#8a6a4c", unlock: "ember" },
-  { id: "holly", name: "Holly", ogham: "Tinne", meaning: "winter's guard", wood: "#d8cfbd", unlock: "ember" },
-  { id: "ogham", name: "Ogham-carved", meaning: "letters cut in the wood", wood: "#9c7c5a", unlock: "ember" },
-  { id: "bogoak", name: "Bog oak", meaning: "five thousand years in the peat", wood: "#2f2a26", unlock: "milestone" },
+  { id: "oak", name: "Oak", ogham: "Duir", meaning: "the door; steadfastness", wood: "#8a6a4c", unlock: "ember", need: { ember: "B", tier: 2 } },
+  { id: "holly", name: "Holly", ogham: "Tinne", meaning: "winter's guard", wood: "#d8cfbd", unlock: "ember", need: { ember: "F", tier: 2 } },
+  { id: "ogham", name: "Ogham-carved", meaning: "letters cut in the wood", wood: "#9c7c5a", unlock: "ember", need: { ember: "I", tier: 2 } },
+  { id: "bogoak", name: "Bog oak", meaning: "five thousand years in the peat", wood: "#2f2a26", unlock: "milestone", need: { level: 10 } },
   { id: "yew", name: "Yew", ogham: "Iodhadh", meaning: "the long life", wood: "#6b3f33", unlock: "samhain" },
 ];
 export const GLOWS: Record<string, string> = {
