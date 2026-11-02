@@ -168,7 +168,7 @@ h3 { font-size: 20px; margin-bottom: 6px; }
 .preview svg { width: 100%; height: auto; }
 @media (max-width: 380px) { .lookgrid { grid-template-columns: 1fr; } .preview svg { max-width: 120px; margin: 0 auto; display: block; } .preview { position: static; } }
 
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + 14px); z-index: 30; background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: var(--wob); max-width: min(92vw, 520px); text-align: center; font-size: 17px; animation: up .2s ease-out; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 108px); z-index: 30; background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: var(--wob); max-width: min(92vw, 520px); text-align: center; font-size: 17px; animation: up .2s ease-out; }
 .toast.out { opacity: 0; transition: opacity .3s; }
 
 /* intake */
@@ -193,3 +193,32 @@ h3 { font-size: 20px; margin-bottom: 6px; }
 @media (min-width: 900px) {
   .village { height: calc(100dvh - 190px); width: auto; max-width: 100%; margin: 0 auto; }
 }
+
+/* the walkable Hollow */
+.view.hollow { overflow: hidden; }
+.world-wrap { position: relative; height: calc(100dvh - 104px - var(--tabs) - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px)); min-height: 360px; }
+#world { width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; }
+#world .plot text { pointer-events: none; }
+#pl.walking .pl-in { animation: bob .3s ease-in-out infinite alternate; }
+@keyframes bob { to { transform: translateY(-4px); } }
+.hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); margin: 0; background: var(--paper2); border: 2px solid var(--ink); border-radius: var(--wob); padding: 8px 14px; text-align: center; font-size: 16px; width: max-content; max-width: calc(100% - 32px); pointer-events: none; }
+.hint small { color: var(--soft); font-size: 14px; }
+.enter { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--ink); color: var(--paper); border: 0; border-radius: var(--wob); padding: 12px 20px; font: 400 20px var(--f-caps); letter-spacing: .04em; white-space: nowrap; box-shadow: 0 3px 0 rgba(30, 28, 26, .25); }
+.enter kbd { font: 600 11px var(--f-mono); border: 1.5px solid currentColor; border-radius: 4px; padding: 1px 5px; margin-left: 8px; vertical-align: 3px; opacity: .7; }
+@media (hover: none) { .enter kbd { display: none; } }
+
+/* inside a building */
+.inside { padding: 14px 16px; display: grid; gap: 10px; }
+.inhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.inhead .ghost { min-height: 40px; padding: 6px 16px; }
+.scene { overflow-x: auto; border: 2.5px solid var(--ink); border-radius: 14px; background: var(--paper2); scroll-behavior: smooth; }
+.interior { display: block; height: auto; min-width: 100%; }
+.prop { cursor: pointer; outline: none; }
+.prop:focus-visible > ellipse:first-of-type { stroke: var(--amber); stroke-width: 3; }
+.prop-name { font: 400 13px var(--f-caps); letter-spacing: .03em; fill: var(--ink); }
+.prop.on .prop-name { fill: var(--red); }
+.pl-room { transition: transform .45s ease-in-out; }
+@media (prefers-reduced-motion: reduce) { .pl-room { transition: none; } #pl.walking .pl-in { animation: none; } .scene { scroll-behavior: auto; } }
+.scenehint { margin: 0; font-size: 15px; }
+.station h3 { margin-bottom: 4px; }
+.view.hollow > section { width: 100%; }

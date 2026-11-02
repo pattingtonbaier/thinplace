@@ -1,4 +1,5 @@
-import { bonfire, buildingArt, DEFS, FIRE_AT, guiser, lookToOpts, PLOTS } from "./art";
+import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
+import { attachWorld, interiorSVG, roomsOf, standAtDoor, worldSVG } from "./world";
 import {
   ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
   type Action, type BuildingId, type Ember,
@@ -13,7 +14,7 @@ import { exportBackup, importBackup, load, persist, save } from "./store";
 type View = "hollow" | "hearth" | "me";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look"
-  | { building: BuildingId } | { found: BuildingId } | { level: number };
+  | { found: BuildingId } | { level: number };
 
 const st = {
   s: null as unknown as Save,
@@ -27,7 +28,9 @@ const st = {
   withSomeone: false,
   note: "",
   toast: "" as string,
-  guiserAt: null as null | [number, number],
+  inside: null as BuildingId | null,
+  station: 0,
+  near: null as BuildingId | null,
   journalDraft: { feel: undefined as number | undefined, text: "", blocker: "" },
   installEvt: null as any,
 };
@@ -121,35 +124,31 @@ function nav() {
 }
 
 function mapView() {
-  const opts = lookToOpts(st.s.profile!.look, glowSize());
-  const at = st.guiserAt ?? [FIRE_AT[0] + 62, FIRE_AT[1] + 40];
-  const plots = BUILDINGS.map((b, i) => {
-    const [x, y] = PLOTS[b.id];
-    const o = st.d.openings[i];
-    const open = isOpen(st.d, b.id);
-    if (open) {
-      return `<g class="plot open" transform="translate(${x} ${y})" role="button" tabindex="0" aria-label="${esc(b.name)}" data-act="go" data-arg="${b.id}">
-        <ellipse cx="0" cy="2" rx="44" ry="7" fill="#1e1c1a" opacity=".1"/><g filter="url(#wob)">${buildingArt(b.id)}</g>
-        <text y="22" text-anchor="middle" class="plot-name">${esc(b.name.replace(/^The /, ""))}</text></g>`;
-    }
-    return `<g class="plot locked" transform="translate(${x} ${y})" role="button" tabindex="0" aria-label="${esc(b.name)}, opens at level ${o.level}" data-act="go" data-arg="${b.id}">
-      <ellipse cx="0" cy="-16" rx="34" ry="26" fill="#efece6" opacity=".55" filter="url(#blur2)"/>
-      <path d="M-26 0q26 -10 52 0" stroke="#9a948c" stroke-width="1.6" stroke-dasharray="3 4" fill="none"/>
-      <text y="-10" text-anchor="middle" class="plot-q">?</text><text y="16" text-anchor="middle" class="plot-lv">level ${o.level}</text></g>`;
-  }).join("");
-  const paths = `<path d="M200 318 Q150 400 200 452 M200 318 Q120 340 80 380 M200 318 Q280 330 322 362 M200 318 Q130 280 88 262 M200 318 Q270 280 314 252 M200 318 L200 178 M200 178 Q130 160 74 156 M200 178 Q270 150 328 140 M200 178 L198 92 M200 452 Q120 480 60 506 M200 452 Q280 480 342 498" fill="none" stroke="#c9c4bb" stroke-width="7" stroke-linecap="round"/>`;
-  return `<section class="map" aria-label="Your Hollow">
-    <svg viewBox="0 0 400 560" class="village" role="group" aria-label="The village around your bonfire">
-      <defs><radialGradient id="fog" cx="50%" cy="52%" r="62%"><stop offset="70%" stop-color="#d6d1c9" stop-opacity="0"/><stop offset="100%" stop-color="#bdb7ae" stop-opacity=".95"/></radialGradient></defs>
-      <rect width="400" height="560" fill="#e7e2d9"/>
-      ${paths}
-      <g transform="translate(${FIRE_AT[0] - 68} ${FIRE_AT[1] - 96}) scale(.68)">${bonfire(st.d.ember, st.d.level, { bare: true })}</g>
-      ${plots}
-      <g class="guiser-walk" style="transform:translate(${at[0] - 23}px, ${at[1] - 56}px)"><g transform="scale(.38)">${guiser({ ...opts, bare: true })}</g></g>
-      <rect width="400" height="560" fill="url(#fog)" pointer-events="none"/>
-      <text x="200" y="548" text-anchor="middle" class="oldroads">the Old Roads</text>
-    </svg>
-  </section>`;
+  const look = lookToOpts(st.s.profile!.look, glowSize());
+  const ws = {
+    open: (id: BuildingId) => isOpen(st.d, id),
+    level: (id: BuildingId) => st.d.openings.find((o) => o.building === id)?.level ?? 0,
+    ember: st.d.ember, lvl: st.d.level, look, firstTime: !st.s.done.walked,
+  };
+  return `<section class="world-wrap" aria-label="Your Hollow">${worldSVG(ws)}
+    ${st.s.done.walked ? "" : `<p class="hint">Tap the ground to walk · tap a building to go in<br><small>Arrow keys or WASD work too</small></p>`}
+    <button class="enter" data-act="enter" hidden></button></section>`;
+}
+
+function insideView(id: BuildingId) {
+  const b = BUILDINGS.find((x) => x.id === id)!;
+  const rooms = roomsOf(id), i = Math.min(st.station, rooms.length - 1), room = rooms[i];
+  const look = lookToOpts(st.s.profile!.look, glowSize());
+  const acts = ACTIONS.filter((a) => a.building === id && a.room === room && a.id !== "journal");
+  const hearthDesk = id === "bothy" && room === "the hearth desk";
+  const title = room[0].toUpperCase() + room.slice(1);
+  return `<section class="inside" aria-label="Inside ${esc(b.name)}">
+    <div class="inhead"><h2>${esc(b.name)}</h2><button class="ghost" data-act="leave">Leave</button></div>
+    <div class="scene" id="scene">${interiorSVG(id, i, look)}</div>
+    <p class="quiet scenehint">Tap a corner of the room to go there.</p>
+    <section class="card station"><h3>${esc(title)}</h3>
+      ${hearthDesk ? `<p class="quiet">Your journal, habits and today's logs live here.</p><div class="row2"><button class="primary" data-act="open-journal">Evening journal</button><button class="ghost" data-act="view" data-arg="hearth">Habits and today</button></div>` : `<ul class="actions">${acts.map(actionRow).join("")}</ul>`}
+    </section></section>`;
 }
 
 function listView() {
@@ -160,7 +159,21 @@ function listView() {
 }
 
 function hollow() {
+  if (st.inside) return insideView(st.inside);
   return st.list ? listView() : mapView();
+}
+
+function enterBuilding(id: BuildingId) {
+  if (!isOpen(st.d, id)) return lockedToast(id);
+  st.inside = id;
+  st.station = 0;
+  st.view = "hollow";
+  render();
+}
+
+function lockedToast(id: BuildingId) {
+  const o = st.d.openings.find((x) => x.building === id);
+  toast(`${bName(id)} is still in the fog. It's drawn in at level ${o?.level}, and you can log anything there now with ＋ Log.`);
 }
 
 function habitRow(h: Habit) {
@@ -270,18 +283,6 @@ function logSheet() {
     <div class="chips"><button class="chip ${st.withSomeone ? "on" : ""}" data-act="with" aria-pressed="${st.withSomeone}">With someone</button>
     <input class="note" placeholder="Add a note (optional)" value="${esc(st.note)}" data-input="note" aria-label="Note"/></div>
     <div id="results">${logResults()}</div>`, { cls: "logsheet" });
-}
-
-function buildingSheet(id: BuildingId) {
-  const b = BUILDINGS.find((x) => x.id === id)!, i = BUILDINGS.indexOf(b), o = st.d.openings[i];
-  const open = isOpen(st.d, id);
-  const acts = ACTIONS.filter((a) => a.building === id && a.id !== "journal");
-  const rooms = [...new Set(acts.map((a) => a.room))];
-  const head = open
-    ? `<p class="blurb">${esc(b.blurb)}</p>${o.level > 1 && o.ts ? `<p class="quiet">Found ${fmtDate(o.ts)}.</p>` : ""}`
-    : `<p class="blurb">Not drawn on your map yet. It opens at level ${o.level}, but you can log anything here now and the XP still counts.</p>`;
-  const extra = id === "bothy" ? `<div class="row2"><button class="primary" data-act="view" data-arg="hearth">The hearth desk</button><button class="ghost" data-act="open-journal">Evening journal</button></div>` : "";
-  return sheetWrap(b.name, `${head}${extra}${rooms.map((r) => `<p class="label">${esc(r[0].toUpperCase() + r.slice(1))}</p><ul class="actions">${acts.filter((a) => a.room === r).map(actionRow).join("")}</ul>`).join("")}`);
 }
 
 function journalSheet() {
@@ -412,7 +413,6 @@ function sheet() {
   if (sh === "install") return installSheet();
   if (sh === "settings") return settingsSheet();
   if (sh === "look") return lookSheet();
-  if ("building" in sh) return buildingSheet(sh.building);
   if ("found" in sh) return foundSheet(sh.found);
   if ("level" in sh) return levelSheet(sh.level);
   return "";
@@ -443,6 +443,25 @@ function intake() {
 }
 
 // ---------- render ----------
+const worldHooks = {
+  enter: (id: BuildingId) => enterBuilding(id),
+  locked: (id: BuildingId) => lockedToast(id),
+  isOpen: (id: BuildingId) => isOpen(st.d, id),
+  near: (id: BuildingId | null) => {
+    st.near = id && isOpen(st.d, id) ? id : null;
+    const b = document.querySelector(".enter") as HTMLButtonElement | null;
+    if (!b) return;
+    b.hidden = !st.near;
+    if (st.near) b.innerHTML = `Go into ${esc(bName(st.near))} <kbd>Enter</kbd>`;
+  },
+  moved: () => {
+    if (st.s.done.walked) return;
+    st.s.done.walked = Date.now();
+    save(st.s);
+    document.querySelector(".hint")?.remove();
+  },
+};
+
 let lastSheetKey = "";
 function render() {
   const root = $app();
@@ -458,6 +477,12 @@ function render() {
     q?.focus();
   }
   if (st.sheet && sheetKey !== lastSheetKey) (document.querySelector(".sheet") as HTMLElement | null)?.scrollTo(0, 0);
+  if (document.getElementById("world")) attachWorld(worldHooks);
+  const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
+  if (scene && on) {
+    const sr = scene.getBoundingClientRect(), r = on.getBoundingClientRect();
+    scene.scrollLeft += r.left + r.width / 2 - (sr.left + sr.width / 2);
+  }
   lastSheetKey = sheetKey;
 }
 
@@ -465,24 +490,17 @@ function render() {
 async function onAct(act: string, arg: string, el: HTMLElement) {
   const it = st.intake;
   switch (act) {
-    case "view": st.view = arg as View; st.sheet = null; break;
+    case "view": if (arg === "hollow" && st.view === "hollow" && st.inside) { standAtDoor(st.inside); } st.inside = null; st.view = arg as View; st.sheet = null; break;
     case "toggle-list": st.list = !st.list; break;
     case "open-log": st.q = ""; st.withSomeone = false; st.sheet = "log"; break;
     case "open-journal": st.journalDraft = { feel: undefined, text: "", blocker: "" }; st.sheet = "journal"; break;
     case "close": st.sheet = null; nextSheet(); break;
     case "next": nextSheet(); break;
     case "sheet": st.sheet = arg as Sheet; break;
-    case "go": {
-      const id = arg as BuildingId;
-      if (!st.list && isOpen(st.d, id)) {
-        const [x, y] = PLOTS[id];
-        st.guiserAt = [x + 56, y + 6];
-        render();
-        await new Promise((r) => setTimeout(r, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 520));
-      }
-      st.sheet = { building: id };
-      break;
-    }
+    case "go": enterBuilding(arg as BuildingId); return;
+    case "enter": if (st.near) enterBuilding(st.near); return;
+    case "leave": if (st.inside) standAtDoor(st.inside); st.inside = null; break;
+    case "station": st.station = Number(arg); break;
     case "log": await logAction(arg); return;
     case "with": st.withSomeone = !st.withSomeone; break;
     case "del": await deleteLog(arg); return;
@@ -629,7 +647,13 @@ export async function start() {
       e.preventDefault();
       onAct(el.dataset.act, el.dataset.arg ?? "", el);
     }
-    if (e.key === "Escape" && st.sheet) { st.sheet = null; render(); }
+    if (e.key === "Escape" && st.sheet) { st.sheet = null; render(); return; }
+    if (!st.sheet && st.inside && !el.closest("input,textarea")) {
+      const n = roomsOf(st.inside).length;
+      if (e.key === "Escape") { standAtDoor(st.inside); st.inside = null; render(); return; }
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") { st.station = (st.station + (e.key === "ArrowRight" ? 1 : n - 1)) % n; render(); return; }
+    }
+    if (e.key === "Enter" && !st.sheet && st.near && document.getElementById("world") && !el.closest("input,textarea,button")) { e.preventDefault(); enterBuilding(st.near); return; }
     if (e.key === "Enter" && el.id === "q") {
       const first = searchActions(st.q)[0];
       if (first) logAction(first.id);
