@@ -1,5 +1,6 @@
 // Ink drawings, made in code so the art stays light and consistent.
 import { EMBERS, GLOWS, HOODS, SATCHELS, type BuildingId, type Ember } from "./content";
+import { staffSVG } from "./staffs";
 import type { Look } from "./engine";
 
 export const INK = "#1e1c1a", PAPER = "#efece6", EYE = "#fbfaf6", RED = "#d2483a";
@@ -34,18 +35,11 @@ export function guiser(o: GuiserOpts = {}): string {
   const cx = 60, g = o.glow || GLOWS.amber, gs = o.glowSize ?? 0.8, hood = o.hood || INK, face = "#3d3935";
   let B = "", M = "", F = "";
   B += `<ellipse cx="${cx}" cy="80" rx="${32 * gs}" ry="${42 * gs}" fill="${g}" opacity="${0.16 + (0.2 * Math.min(gs, 1.4)) / 1.4}" filter="url(#blur)"/><ellipse cx="${cx}" cy="139" rx="24" ry="3.4" fill="${INK}" opacity=".13"/>`;
-  if (o.staff) {
-    const sc = o.staff === "drift" ? "#a7a29a" : o.staff === "crook" ? "#8c6a48" : "#6b4a2e", st = o.staff;
-    if (st === "crook") B += `<path d="M${cx + 27} 138L${cx + 31} 40q2 -14 -8 -14q-8 0 -6 8" fill="none" stroke="${sc}" stroke-width="4" stroke-linecap="round"/><circle cx="${cx + 19}" cy="36" r="3.6" fill="#e8d48a" stroke="${INK}" stroke-width="1.4"/>`;
-    else B += `<path d="M${cx + 30} 34L${cx + 26} 138" stroke="${sc}" stroke-width="4" stroke-linecap="round"/>`;
-    if (st === "rowan") B += `<path d="M${cx + 30} 34q8 -6 10 2q-6 2 -10 -2M${cx + 30} 34q-8 -8 -12 0q6 2 12 0" fill="#7f9a7a" stroke="${INK}" stroke-width="1.2"/><circle cx="${cx + 34}" cy="40" r="2.4" fill="${RED}"/><circle cx="${cx + 37}" cy="37" r="2.4" fill="${RED}"/>`;
-    if (st === "ogham") B += `<path d="M${cx + 28} 60h5M${cx + 28} 68h5M${cx + 28} 76h3M${cx + 28} 84h5M${cx + 28} 92h3" stroke="${EYE}" stroke-width="1.6"/><path d="M${cx + 30} 22l5 8 -5 8 -5 -8z" fill="#7fc3c7" stroke="${INK}" stroke-width="1.6"/>`;
-    if (st === "lantern") B += `<path d="M${cx + 30} 34q10 0 10 8" fill="none" stroke="${sc}" stroke-width="3" stroke-linecap="round"/><circle cx="${cx + 40}" cy="52" r="10" fill="${g}" opacity=".5" filter="url(#blur)"/><path d="M${cx + 40} 42v3" stroke="${INK}" stroke-width="1.6"/><rect x="${cx + 35}" y="45" width="10" height="13" rx="2" fill="${g}" stroke="${INK}" stroke-width="1.6"/><path d="M${cx + 34} 45h12M${cx + 34} 58h12" stroke="${INK}" stroke-width="1.8"/>`;
-    if (st === "drift") B += `<path d="M${cx + 30} 34q-6 -6 -2 -12q6 2 4 10M${cx + 30} 34q8 -4 10 -12" fill="none" stroke="${sc}" stroke-width="3" stroke-linecap="round"/><path d="M${cx + 33} 40q6 6 4 16q-4 -6 -6 -14" fill="${EYE}" stroke="${INK}" stroke-width="1.2"/>`;
-  }
+  if (o.staff) B += staffSVG(o.staff, cx - 60);
   const body = `M${cx} 26C${cx + 22} 28 ${cx + 28} 52 ${cx + 26} 70C${cx + 30} 96 ${cx + 34} 118 ${cx + 30} 128Q${cx} 134 ${cx - 30} 128C${cx - 34} 118 ${cx - 30} 96 ${cx - 26} 70C${cx - 28} 52 ${cx - 22} 28 ${cx} 26Z`;
   M += `<path d="${body}" fill="${hood}"/>`;
-  if (hood !== INK) M += `<path d="${body}" fill="none" stroke="${INK}" stroke-width="2.4"/>`;
+  M += `<clipPath id="cloak${cx}"><path d="${body}"/></clipPath><g clip-path="url(#cloak${cx})" stroke="#1e1c1a" stroke-opacity=".22" stroke-width="1">${Array.from({ length: 22 }, (_, k) => `<path d="M${cx + 8} ${80 + k * 5}l32 -40"/>`).join("")}</g><path d="M${cx - 12} 84q-4 20 -2 40M${cx + 12} 86q4 20 2 39" fill="none" stroke="#1e1c1a" stroke-opacity=".35" stroke-width="1.4"/>`;
+  M += `<path d="${body}" fill="none" stroke="${INK}" stroke-width="2.6"/>`;
   if (o.trim) M += `<path d="M${cx - 30} 126Q${cx} 132 ${cx + 30} 126" fill="none" stroke="${o.trim}" stroke-width="4"/><path d="M${cx - 17} 72q17 8 34 0" fill="none" stroke="${o.trim}" stroke-width="3"/>`;
   M += `<path d="M${cx} 22l4 -8" stroke="${hood}" stroke-width="4" stroke-linecap="round"/>`;
   M += `<ellipse cx="${cx}" cy="58" rx="17" ry="19" fill="${face}"/>`;

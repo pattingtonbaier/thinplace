@@ -132,6 +132,7 @@ function mapView() {
   const ws = {
     open: (id: BuildingId) => isOpen(st.d, id),
     level: (id: BuildingId) => st.d.openings.find((o) => o.building === id)?.level ?? 0,
+    rooms: (id: BuildingId) => st.d.rooms[id] ?? {},
     ember: st.d.ember, lvl: st.d.level, look, firstTime: !st.s.done.walked,
   };
   return `<section class="world-wrap" aria-label="Your Hollow">${worldSVG(ws)}
@@ -457,15 +458,16 @@ function lookSheet() {
 function lookPicker(look: Profile["look"], calling: string, prefix: string) {
   const c = CALLING_BY_ID[calling];
   const satchels = SATCHELS.filter((b) => b.id === "satchel" || b.id === "sack" || b.id === c?.satchel);
-  const staves = STAVES.filter((x) => x.id === c?.staff || x.id === "rowan");
+  const staves = STAVES.filter((x) => x.unlock === "start" || x.id === c?.staff);
+  const hoods = HOODS.filter((h) => h.unlock === "start");
   const pick = (kind: string, items: { id: string; name: string }[], cur: string, sw?: (id: string) => string) =>
     `<p class="label">${kind}</p><div class="chips wrap" role="radiogroup">${items.map((it) => `<button class="chip ${cur === it.id ? "on" : ""}" role="radio" aria-checked="${cur === it.id}" data-act="${prefix}${kind.toLowerCase()}" data-arg="${it.id}">${sw ? sw(it.id) : ""}${esc(it.name)}</button>`).join("")}</div>`;
   return `<div class="lookgrid"><div class="preview">${guiser({ ...lookToOpts(look, 0.95), label: "Preview of your Scáth" })}</div><div>
-    ${pick("Hood", HOODS, look.hood, (id) => `<i class="sw" style="background:${HOODS.find((h) => h.id === id)!.hood}"></i>`)}
+    ${pick("Hood", hoods, look.hood, (id) => `<i class="sw" style="background:${HOODS.find((h) => h.id === id)!.hood}"></i>`)}
     ${pick("Satchel", satchels, look.satchel)}
     ${pick("Staff", staves, look.staff)}
     ${pick("Glow", Object.keys(GLOWS).map((k) => ({ id: k, name: k[0].toUpperCase() + k.slice(1) })), look.glow, (id) => `<i class="sw" style="background:${GLOWS[id]}"></i>`)}
-    <p class="quiet">Patterned hoods, other staves and masks unlock as you grow.</p></div></div>`;
+    <p class="quiet">${esc(STAVES.find((x) => x.id === look.staff)?.ogham ? `${STAVES.find((x) => x.id === look.staff)!.name} (${STAVES.find((x) => x.id === look.staff)!.ogham}): ${STAVES.find((x) => x.id === look.staff)!.meaning}.` : `${STAVES.find((x) => x.id === look.staff)?.name ?? ""}: ${STAVES.find((x) => x.id === look.staff)?.meaning ?? ""}.`)} More dyes, staves and masks unlock as you grow.</p></div></div>`;
 }
 
 function levelSheet(level: number) {

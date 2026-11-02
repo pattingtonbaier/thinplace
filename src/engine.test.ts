@@ -79,6 +79,18 @@ describe("openings", () => {
   });
 });
 
+describe("rooms", () => {
+  test("a room opens the first time you log there", () => {
+    const s = withProfile();
+    s.logs = [log("c1", "cook", T0), log("c2", "cook", T0 + H), log("w1", "water", T0 + 2 * H)];
+    const d = derive(s);
+    expect(d.rooms.bothy["the Cauldron"]).toBe(T0);
+    expect(d.rooms.bothy["the Tobar"]).toBe(T0 + 2 * H);
+    expect(d.rooms.bothy["the hearth desk"]).toBeDefined();
+    expect(d.rooms.bothy["the Dreaming Loft"]).toBeUndefined();
+  });
+});
+
 describe("merge", () => {
   test("logs from two devices combine without duplicates, and deletions travel", () => {
     const a = withProfile();

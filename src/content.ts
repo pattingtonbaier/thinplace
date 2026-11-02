@@ -123,13 +123,22 @@ export const ACTIONS: Action[] = [
 
 export const ACTION_BY_ID: Record<string, Action> = Object.fromEntries(ACTIONS.map((a) => [a.id, a]));
 
-// Looks. Only the plain starting range; patterns, other staves and masks unlock later.
-export const HOODS = [
-  { id: "ink", name: "Ink", hood: "#1e1c1a" },
-  { id: "moss", name: "Moss", hood: "#4f6b4a", trim: "#d6b26a" },
-  { id: "sea", name: "Sea", hood: "#3f6f72", trim: "#efe3c6" },
-  { id: "rust", name: "Rust", hood: "#8c4a2f", trim: "#efe3c6" },
-  { id: "heather", name: "Heather", hood: "#6b4f7a", trim: "#e8d48a" },
+// Looks. Hoods are muted folk dyes from Irish wool-craft: mid-tones that stand out on grey ink
+// and never compete with the red. There is no red hood.
+export type Unlock = "start" | "calling" | "ember" | "milestone" | "samhain";
+export const HOODS: { id: string; name: string; hood: string; trim?: string; note: string; unlock: Unlock }[] = [
+  { id: "ink", name: "Ink", hood: "#26231f", note: "bog-oak black", unlock: "start" },
+  { id: "oatmeal", name: "Oatmeal", hood: "#cdbfa3", trim: "#6f6656", note: "undyed wool", unlock: "start" },
+  { id: "peat", name: "Peat", hood: "#6a5444", trim: "#d9c9a8", note: "turf-smoke brown", unlock: "start" },
+  { id: "woad", name: "Woad", hood: "#4c6680", trim: "#e6dcc4", note: "the old blue", unlock: "start" },
+  { id: "bracken", name: "Bracken", hood: "#6f7a4c", trim: "#e6dcc4", note: "autumn fern green", unlock: "start" },
+  { id: "weld", name: "Weld", hood: "#c29a3e", trim: "#3d3529", note: "yellow-weed gold", unlock: "ember" },
+  { id: "crotal", name: "Crotal", hood: "#9a5f3a", trim: "#e6dcc4", note: "lichen rust", unlock: "ember" },
+  { id: "heather", name: "Heather", hood: "#76607e", trim: "#e2cf8c", note: "hillside purple", unlock: "ember" },
+  { id: "sloe", name: "Sloe", hood: "#4e3a4b", trim: "#c9b8cf", note: "blackthorn plum", unlock: "ember" },
+  { id: "seaholly", name: "Sea-holly", hood: "#7f9696", trim: "#2f3a3a", note: "grey-blue shore", unlock: "ember" },
+  { id: "moss", name: "Moss", hood: "#55684f", trim: "#d6b26a", note: "bog moss", unlock: "milestone" },
+  { id: "samhain", name: "Samhain", hood: "#2f2b29", trim: "#c97b3d", note: "guising soot and ember", unlock: "samhain" },
 ];
 export const SATCHELS = [
   { id: "satchel", name: "Satchel", color: "#8c5a3c" },
@@ -137,12 +146,21 @@ export const SATCHELS = [
   { id: "books", name: "Book bag", color: "#5a3f33" },
   { id: "basket", name: "Basket", color: "#b08a52" },
 ];
-export const STAVES = [
-  { id: "rowan", name: "Rowan" },
-  { id: "ogham", name: "Ogham" },
-  { id: "crook", name: "Shepherd's crook" },
-  { id: "lantern", name: "Lantern staff" },
-  { id: "drift", name: "Driftwood" },
+// Staves, mostly named for the trees of the Ogham alphabet.
+export const STAVES: { id: string; name: string; ogham?: string; meaning: string; wood: string; unlock: Unlock }[] = [
+  { id: "rowan", name: "Rowan", ogham: "Luis", meaning: "protection from enchantment", wood: "#a58463", unlock: "start" },
+  { id: "hazel", name: "Hazel", ogham: "Coll", meaning: "wisdom", wood: "#b39674", unlock: "start" },
+  { id: "ash", name: "Ash", ogham: "Nion", meaning: "journeys and the world-tree", wood: "#e2d8c4", unlock: "start" },
+  { id: "blackthorn", name: "Blackthorn", ogham: "Straif", meaning: "strength", wood: "#4a3c33", unlock: "start" },
+  { id: "willow", name: "Willow", ogham: "Saille", meaning: "poetry, dreams and the moon", wood: "#c3b08e", unlock: "start" },
+  { id: "drift", name: "Driftwood", meaning: "what the sea gave back", wood: "#cfc9bd", unlock: "start" },
+  { id: "crook", name: "Shepherd's crook", meaning: "tending", wood: "#a07e5c", unlock: "calling" },
+  { id: "lantern", name: "Lantern staff", meaning: "seeing", wood: "#8c6a48", unlock: "calling" },
+  { id: "oak", name: "Oak", ogham: "Duir", meaning: "the door; steadfastness", wood: "#8a6a4c", unlock: "ember" },
+  { id: "holly", name: "Holly", ogham: "Tinne", meaning: "winter's guard", wood: "#d8cfbd", unlock: "ember" },
+  { id: "ogham", name: "Ogham-carved", meaning: "letters cut in the wood", wood: "#9c7c5a", unlock: "ember" },
+  { id: "bogoak", name: "Bog oak", meaning: "five thousand years in the peat", wood: "#2f2a26", unlock: "milestone" },
+  { id: "yew", name: "Yew", ogham: "Iodhadh", meaning: "the long life", wood: "#6b3f33", unlock: "samhain" },
 ];
 export const GLOWS: Record<string, string> = {
   amber: "#f2b84b", ember: "#e8794a", moss: "#9fc27a", sea: "#7fc3c7", lilac: "#b9a3e0", rose: "#ec9cb4", pale: "#f1e7c8",
@@ -162,10 +180,10 @@ export interface Calling {
 }
 
 export const CALLINGS: Calling[] = [
-  { id: "athlete", name: "The Athlete", classic: "Warrior", main: "B", second: "N", staff: "rowan", satchel: "satchel", charm: "Second Wind", charmText: "One missed day a week doesn't break a streak.", motto: "The body keeps the fire lit." },
-  { id: "scholar", name: "The Scholar", classic: "Mage", main: "I", second: "O", staff: "ogham", satchel: "books", charm: "Bookworm", charmText: "Finished books and lessons fade the Each-uisce and the Changeling twice as fast.", motto: "Every page is a step through the veil." },
-  { id: "storyteller", name: "The Storyteller", classic: "Bard", main: "F", second: "O", staff: "drift", satchel: "satchel", charm: "Wordsmith", charmText: "Each poem lights a new lamp post on Bards' Lane.", motto: "A story told is a fire shared." },
-  { id: "founder", name: "The Founder", classic: "Warlock", main: "R", second: "I", staff: "crook", satchel: "satchel", charm: "Quick Fix", charmText: "Tasks under 15 minutes count as full hits on the Púca.", motto: "A pact with deadlines, kept." },
+  { id: "athlete", name: "The Athlete", classic: "Warrior", main: "B", second: "N", staff: "blackthorn", satchel: "satchel", charm: "Second Wind", charmText: "One missed day a week doesn't break a streak.", motto: "The body keeps the fire lit." },
+  { id: "scholar", name: "The Scholar", classic: "Mage", main: "I", second: "O", staff: "hazel", satchel: "books", charm: "Bookworm", charmText: "Finished books and lessons fade the Each-uisce and the Changeling twice as fast.", motto: "Every page is a step through the veil." },
+  { id: "storyteller", name: "The Storyteller", classic: "Bard", main: "F", second: "O", staff: "willow", satchel: "satchel", charm: "Wordsmith", charmText: "Each poem lights a new lamp post on Bards' Lane.", motto: "A story told is a fire shared." },
+  { id: "founder", name: "The Founder", classic: "Warlock", main: "R", second: "I", staff: "ash", satchel: "satchel", charm: "Quick Fix", charmText: "Tasks under 15 minutes count as full hits on the Púca.", motto: "A pact with deadlines, kept." },
   { id: "wanderer", name: "The Wanderer", classic: "Ranger", main: "E", second: "B", staff: "rowan", satchel: "satchel", charm: "Wanderer", charmText: "A first visit anywhere drops a hood trim or a minor relic.", motto: "The Old Roads are wider than they look." },
   { id: "curator", name: "The Curator", classic: "Rogue", main: "O", second: "E", staff: "lantern", satchel: "basket", charm: "Keen Eye", charmText: "Item cards show one extra stat, and each collection stage needs one fewer item.", motto: "Keep only what you love." },
   { id: "homesteader", name: "The Homesteader", classic: "Druid", main: "N", second: "O", staff: "crook", satchel: "sack", charm: "Steady Hands", charmText: "A streak shield every 7 days of showing up.", motto: "Tend the hearth and the hearth tends you." },

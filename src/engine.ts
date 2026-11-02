@@ -177,6 +177,7 @@ export interface Derived {
   awards: Record<string, Award>;
   levelUps: LevelUp[];
   openings: Opening[];
+  rooms: Record<string, Record<string, number>>; // building -> room -> when it opened (the first log there)
   byDay: Record<string, Log[]>;
   pointsLeft: number;
 }
@@ -211,7 +212,10 @@ export function derive(s: Save): Derived {
   const counts: Record<string, number> = {};
   let total = 0;
   let level = 1;
+  const rooms: Record<string, Record<string, number>> = { bothy: { "the hearth desk": s.created } };
   for (const l of liveLogs(s)) {
+    const act = ACTION_BY_ID[l.action];
+    if (act) (rooms[act.building] ??= {})[act.room] ??= l.ts;
     const day = dayKey(l.ts, cutoff);
     (byDay[day] ??= []).push(l);
     const k = day + "|" + l.action;
@@ -242,7 +246,7 @@ export function derive(s: Save): Derived {
   return {
     total, level: lv.level, into: lv.into, need: lv.need,
     emberXP, emberEarned: earned, emberStart: start, ember,
-    awards, levelUps, openings, byDay,
+    awards, levelUps, openings, rooms, byDay,
     pointsLeft: START_POINTS - pointsSpent(s.profile),
   };
 }
