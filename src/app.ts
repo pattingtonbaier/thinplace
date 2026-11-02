@@ -1,5 +1,7 @@
 import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
+import { attachBothy, placeAt, STATIONS } from "./bothy";
+import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
@@ -13,9 +15,10 @@ import { exportBackup, importBackup, load, persist, save } from "./store";
 import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForDay, PROMPTS, suggestCalling, suggestPoints } from "./quiz";
 
 // ---------- state ----------
-type View = "hollow" | "hearth" | "me";
+type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
+  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes"
   | { found: BuildingId } | { level: number };
 
 const st = {
@@ -37,6 +40,10 @@ const st = {
   reveal: 0, // the night whose tale was just revealed
   cairnDraft: "",
   installEvt: null as any,
+  bothy: "room" as "room" | "table",
+  stationAt: null as string | null, // the part of the Bothy you're standing at
+  names: false, // show the names of things on the table
+  motion: { grind: 0, boil: 0, notch: 0 }, // when each ritual started
 };
 
 // On the claude.ai preview, downloads and home-screen install aren't available.
@@ -90,14 +97,16 @@ async function logAction(actionId: string, extra: Partial<Log> = {}) {
   await commit();
   const aw = st.d.awards[l.id];
   st.note = "";
-  if (aw.capped) toast(`${a.name} logged. That's 3 today, so this one is just for the record.`);
+  if (aw.capped) toast(`${a.name}: into the day-book. That's three today, so this one is for the record.`);
   else {
     const parts = Object.entries(aw.byEmber).map(([e, v]) => `+${v} ${emberName(e as Ember)}`);
-    toast(`${a.name} · ${parts.join(" · ")}`);
+    toast(`${a.name}: ground in · ${parts.join(" · ")}`);
   }
+  if (atTable()) { st.motion.grind = performance.now(); if (st.sheet === "log") st.sheet = null; if (st.queue.some((q) => q && typeof q === "object" && "level" in q)) st.motion.boil = performance.now(); }
   if (st.queue.length && (st.sheet === null || st.sheet === "log")) nextSheet();
   render();
 }
+const atTable = () => st.view === "bothy" && st.bothy === "table" && !st.inside;
 
 async function deleteLog(id: string) {
   const l = st.s.logs.find((x) => x.id === id);
@@ -124,7 +133,7 @@ function topbar() {
 function nav() {
   const t = (v: View, label: string, icon: string) =>
     `<button class="tab ${st.view === v ? "on" : ""}" data-act="view" data-arg="${v}" aria-current="${st.view === v ? "page" : "false"}"><span aria-hidden="true">${icon}</span>${label}</button>`;
-  return `<nav class="tabs" aria-label="Main">${t("hollow", "Hollow", "⌂")}<button class="logbtn" data-act="open-log" aria-label="Quick log">＋ Log</button>${t("hearth", "Hearth", "☼")}${t("me", "Me", "◐")}</nav>`;
+  return `<nav class="tabs" aria-label="Main">${t("hollow", "Hollow", "⌂")}<button class="logbtn" data-act="open-log" aria-label="Quick log">＋ Log</button>${t("bothy", "Bothy", "☼")}</nav>`;
 }
 
 function mapView() {
@@ -152,7 +161,7 @@ function insideView(id: BuildingId) {
     <div class="scene" id="scene">${interiorSVG(id, i, look)}</div>
     <p class="quiet scenehint">Tap a corner of the room to go there.</p>
     <section class="card station"><h3>${esc(title)}</h3>
-      ${hearthDesk ? `<p class="quiet">Your journal, habits and today's logs live here.</p><div class="row2"><button class="primary" data-act="open-journal">Evening journal</button><button class="ghost" data-act="view" data-arg="hearth">Habits and today</button></div>` : `<ul class="actions">${acts.map(actionRow).join("")}</ul>`}
+      ${hearthDesk ? `<p class="quiet">Your journal, habits and today's logs live here.</p><div class="row2"><button class="primary" data-act="open-journal">Evening journal</button><button class="ghost" data-act="view" data-arg="bothy">Habits and today</button></div>` : `<ul class="actions">${acts.map(actionRow).join("")}</ul>`}
     </section></section>`;
 }
 
@@ -163,6 +172,110 @@ function listView() {
   }).join("")}</ul></section>`;
 }
 
+// ---------- the Bothy: the room you walk, and the table you sit at ----------
+const stationOf = (id: string | null) => STATIONS.find((x) => x.id === id);
+function stationCard(id: string | null): string {
+  const s = stationOf(id);
+  if (!s) return `<p class="quiet">Walk to any part of the house. The hearth desk is beside the fire.</p>`;
+  if (s.id === "desk") return `<h3>The hearth desk</h3><p class="quiet">Your day-book and quill, the ember flask and the map of the Hollow are on the table.</p><button class="primary wide" data-act="sit">Sit at the table</button>`;
+  const made = st.d.rooms.bothy?.[s.room] !== undefined;
+  const acts = ACTIONS.filter((a) => a.building === "bothy" && a.room === s.room);
+  return `<h3>${esc(s.name[0].toUpperCase() + s.name.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.map(actionRow).join("")}</ul>${s.id === "oak" ? `<button class="ghost wide" data-act="leave-bothy">Leave the Bothy</button>` : ""}`;
+}
+function bothyView() {
+  if (st.bothy === "table") return tableView();
+  return `<section class="bothy-room" aria-label="Inside your Bothy">
+    <div class="inhead"><h2>Your Bothy</h2><button class="ghost" data-act="leave-bothy">Leave</button></div>
+    <canvas id="room" role="application" aria-label="Your Bothy, in cutaway. Tap a part of the house to walk there."></canvas>
+    <section class="card station" id="station" aria-live="polite">${stationCard(st.stationAt)}</section>
+    <details class="plain"><summary>The rooms, as a list</summary><ul class="blist">${STATIONS.map((x) => `<li><button class="brow" data-act="station-go" data-arg="${x.id}"><b>${esc(x.name[0].toUpperCase() + x.name.slice(1))}</b><span>${x.id === "desk" || st.d.rooms.bothy?.[x.room] !== undefined ? "made" : "not made yet"}</span></button></li>`).join("")}</ul></details>
+  </section>`;
+}
+function tableView() {
+  return `<section class="table-view" aria-label="The working table">
+    <div class="inhead"><h2>The working table</h2><div class="row"><button class="ghost" data-act="names" aria-pressed="${st.names}">${st.names ? "Hide names" : "Names"}</button><button class="ghost" data-act="stand">Stand up</button></div></div>
+    <canvas id="table" role="application" aria-label="Your working table. Tap a thing to use it; the same things are listed below."></canvas>
+    <details class="plain"><summary>What's on the table</summary><ul class="blist">${SPOTS.filter((x) => x.id !== "notes" || hasNotes()).map((x) => `<li><button class="brow" data-act="spot" data-arg="${x.id}"><b>${esc(x.label.split(":")[0])}</b><span>${esc(x.label.split(":")[1]?.trim() ?? "")}</span></button></li>`).join("")}</ul></details>
+  </section>`;
+}
+function hasNotes() { return tasks() !== "" || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
+function tableData(): TableData {
+  const t = today(), now = new Date();
+  const samhain = (now.getMonth() === 9 && now.getDate() === 31) || (now.getMonth() === 10 && now.getDate() === 1);
+  const day = (st.d.byDay[t] ?? []).map((l) => ({ name: ACTION_BY_ID[l.action]?.name ?? l.action }));
+  const since = Date.now() - 30 * 864e5;
+  const notches = new Set(st.s.logs.filter((l) => !l.deleted && l.habit && l.ts > since).map((l) => l.habit + dayKey(l.ts, st.s.settings.cutoffHour))).size;
+  const moons = Array.from({ length: 28 }, (_, k) => { const dk = addDays(t, k - 27); return (st.d.byDay[dk]?.length ?? 0) > 0 || !!st.s.journal[dk]; });
+  const last = (st.d.byDay[t] ?? []).slice(-1)[0];
+  const hot = last ? EMBERS.findIndex((e) => e.key === ACTION_BY_ID[last.action]?.ember) : -1;
+  const jars = EMBERS.flatMap((e) => [3, 6, 9].filter((n) => st.d.emberEarned[e.key] >= n).map((n) => `${e.name} ${"I".repeat(n / 3)}`));
+  const fp = folklorePrompt();
+  const prompt = fp ? fp.prompt.q : !st.s.quiz?.settled ? "Tonight the hearth has a question for you." : "Sit a while. What stayed with you today?";
+  const cut = st.s.settings.cutoffHour, end = new Date(now); end.setHours(cut, 0, 0, 0); if (end <= now) end.setDate(end.getDate() + 1);
+  return {
+    dateLabel: (samhain ? "Samhain, " : "") + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
+    day, journal: st.s.journal[t]?.text || null, notches, moons,
+    found: BUILDINGS.filter((b) => isOpen(st.d, b.id)).map((b) => b.id),
+    stones: EMBERS.map((e) => st.d.ember[e.key]), hot, flask: st.d.into / st.d.need, jars,
+    sealed: (st.s.cairn ?? []).some((c) => Date.now() < c.opens), prompt,
+    candle: (end.getTime() - now.getTime()) / 864e5, notes: hasNotes(),
+    labels: st.names || (st.s.done.tableVisits ?? 0) < 4,
+    look: { hood: HOODS.find((h) => h.id === st.s.profile!.look.hood)?.hood ?? "#26231f" },
+  };
+}
+let tableRaf = 0;
+function attachTable() {
+  const cv = document.getElementById("table") as HTMLCanvasElement | null;
+  cancelAnimationFrame(tableRaf);
+  if (!cv) return;
+  const DPR = Math.min(2, devicePixelRatio || 1), data = tableData();
+  const still = document.createElement("canvas"); still.width = 1000 * DPR; still.height = 1000 * DPR;
+  const sc = still.getContext("2d")!; sc.scale(DPR, DPR); drawTable(sc, data);
+  const size = () => { const w = cv.getBoundingClientRect().width; cv.width = w * DPR; cv.height = w * DPR; cv.style.height = w + "px"; return w; };
+  let w = size();
+  const ctx = cv.getContext("2d")!;
+  cv.onpointerdown = (e) => {
+    const r = cv.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * 1000, y = ((e.clientY - r.top) / r.height) * 1000;
+    const hit = SPOTS.find((s) => (s.id !== "notes" || data.notes) && x >= s.r[0] && x <= s.r[2] && y >= s.r[1] && y <= s.r[3]);
+    if (hit) useSpot(hit.id);
+  };
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const frame = (now: number) => {
+    if (!cv.isConnected) return;
+    if (Math.abs(cv.getBoundingClientRect().width - w) > 1) w = size();
+    const k = (w * DPR) / 1000, t = reduce ? 0 : now / 1000;
+    const prog = (s: number) => (s && now - s < 1000 ? (now - s) / 1000 : 0);
+    const m: Motion = { grind: prog(st.motion.grind), boil: prog(st.motion.boil), notch: prog(st.motion.notch) };
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(still, 0, 0, cv.width, cv.height);
+    ctx.setTransform(k, 0, 0, k, 0, 0); drawLive(ctx, data, t, m);
+    tableRaf = requestAnimationFrame(frame);
+  };
+  tableRaf = requestAnimationFrame(frame);
+}
+function useSpot(id: string) {
+  const open: Record<string, Sheet> = { day: "day", tally: "tally", embers: "embers", stones: "embers", moons: "moons", relics: "relics", bag: "pack", cairn: "cairn", book: "book", notes: "notes", bowl: "look", key: "settings" };
+  if (id === "log") { st.q = ""; st.withSomeone = false; st.sheet = "log"; }
+  else if (id === "journal" || id === "quill" || id === "prompt") { st.journalDraft = { feel: undefined, text: "", blocker: "", ptext: "" }; st.reveal = 0; st.sheet = "journal"; }
+  else if (id === "map") { st.view = "hollow"; standAtDoor("bothy"); }
+  else if (id === "candle") { const d = tableData(); toast(`The candle burns until ${st.s.settings.cutoffHour} am, when the day turns over. About ${Math.max(1, Math.round(d.candle * 24))} hours left in it.`); return; }
+  else if (open[id]) st.sheet = open[id];
+  render();
+}
+function attachRoom() {
+  const cv = document.getElementById("room") as HTMLCanvasElement | null;
+  if (!cv) return;
+  const look = lookToOpts(st.s.profile!.look, glowSize());
+  const card = () => { const el = document.getElementById("station"); if (el) el.innerHTML = stationCard(st.stationAt); };
+  attachBothy(cv, { "the hearth desk": 1, ...(st.d.rooms.bothy ?? {}) }, look, {
+    arrive: (id) => { st.stationAt = id; card(); },
+    near: (id) => { if (id && id !== st.stationAt) { st.stationAt = id; card(); } },
+    tapStation: (id) => { if (id === "desk") sit(); },
+  }, (st.s.done.roomVisits ?? 0) < 4);
+}
+function sit() {
+  st.bothy = "table"; st.s.done.tableVisits = (st.s.done.tableVisits ?? 0) + 1; save(st.s); render();
+}
+
 function hollow() {
   if (st.inside) return insideView(st.inside);
   return st.list ? listView() : mapView();
@@ -170,6 +283,7 @@ function hollow() {
 
 function enterBuilding(id: BuildingId) {
   if (!isOpen(st.d, id)) return lockedToast(id);
+  if (id === "bothy") { st.inside = null; st.view = "bothy"; st.bothy = "room"; placeAt("desk"); st.stationAt = "desk"; render(); return; }
   st.inside = id;
   st.station = 0;
   st.view = "hollow";
@@ -216,48 +330,63 @@ function todayLogs() {
   }).join("")}</ul>`;
 }
 
-function hearth() {
-  const t = today();
-  const j = st.s.journal[t];
-  const habits = st.s.habits.filter((h) => !h.archived);
-  const year = st.s.journal[addDays(t, -365)];
-  return `<section class="hearth">
-    <h2>The hearth desk</h2>
-    ${tasks()}
-    <section class="card"><h3>Habits</h3>${habits.length ? `<ul class="habits">${habits.map(habitRow).join("")}</ul>` : `<p class="quiet">No habits yet.</p>`}
-      <button class="link" data-act="task" data-arg="habits">${habits.length ? "Change habits" : "Choose habits"}</button></section>
-    <section class="card journal-card"><h3>Evening journal</h3>
-      ${j ? `<p>${j.feel !== undefined ? `<b>${FEELINGS[j.feel]}.</b> ` : ""}${esc(j.text ?? "")}</p><button class="link" data-act="open-journal">Add to tonight's entry</button>`
-        : `<p class="quiet">Three small prompts, and a catch-up for anything you missed. Then the Hollow closes the gate.</p><button class="primary" data-act="open-journal">Open the journal</button>`}
-    </section>
-    ${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}
-    ${(st.s.cairn ?? []).map((c) => Date.now() >= c.opens ? `<section class="card"><h3>A letter from the cairn</h3><p>“${esc(c.text)}”</p><p class="quiet">Written ${fmtDate(c.written)}.</p></section>` : `<section class="card cairn"><h3>A cairn by the hearth</h3><p class="quiet">Sealed until ${new Date(c.opens).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.</p></section>`).join("")}
-    ${year ? `<section class="card"><h3>On this day, a year ago</h3><p>${esc(year.text ?? "")}</p></section>` : ""}
-    <section class="card"><h3>Today</h3>${todayLogs()}</section>
-  </section>`;
+// ---------- what the table opens ----------
+function daySheet() {
+  return sheetWrap("The day-book", `<p class="quiet">${esc(tableData().dateLabel)}. Everything you've ground in today.</p>${todayLogs()}<button class="primary wide" data-act="spot" data-arg="log">Grind something in</button>`);
 }
-
-function me() {
+function tallySheet() {
+  const habits = st.s.habits.filter((h) => !h.archived);
+  return sheetWrap("The tally stick", `<p class="blurb">Cut a notch for each day you keep a habit. A notch counts as a log, so it earns like anything else.</p>
+    ${habits.length ? `<ul class="habits">${habits.map(habitRow).join("")}</ul>` : `<p class="quiet">No habits chosen yet.</p>`}
+    <button class="ghost wide" data-act="task" data-arg="habits">${habits.length ? "Change your habits" : "Choose up to three"}</button>`);
+}
+function embersSheet() {
   const p = st.s.profile!, d = st.d, c = CALLING_BY_ID[p.calling];
-  const opts = lookToOpts(p.look, glowSize());
   const rows = EMBERS.map((e) => {
     const xp = d.emberXP[e.key], into = xp % EMBER_STEP, earned = d.emberEarned[e.key];
     const nextTier = [3, 6, 9].find((n) => n > earned);
-    return `<tr><th scope="row">${e.name}</th><td class="num">${d.ember[e.key]}</td><td><div class="mini"><span style="width:${(into / EMBER_STEP) * 100}%"></span></div><small>${into} / ${EMBER_STEP} XP${nextTier ? ` · relic at ${nextTier} earned` : ""}</small></td></tr>`;
+    return `<tr><th scope="row">${e.name}</th><td class="num">${d.ember[e.key]}</td><td><div class="mini"><span style="width:${(into / EMBER_STEP) * 100}%"></span></div><small>${into} / ${EMBER_STEP} toward the next point${nextTier ? ` · a relic at ${nextTier} earned` : ""}</small></td></tr>`;
   }).join("");
-  const found = d.openings.filter((o) => o.level > 1 && o.ts).map((o) => {
+  return sheetWrap("The ember flask", `<p class="blurb">Level ${d.level}${c ? `, ${esc(c.name)}` : ""}. The flask fills as you log and boils over when you rise a level: ${d.into} of ${d.need} toward the next.</p>
+    <div class="fire">${bonfire(d.ember, d.level, { labels: true })}</div>
+    <table class="embers"><tbody>${rows}</tbody></table>
+    ${!st.s.done.points ? `<button class="primary wide" data-act="task" data-arg="points">Spread your ${d.pointsLeft} starting points</button>` : ""}`);
+}
+function moonsSheet() {
+  const t = today();
+  const days = Array.from({ length: 28 }, (_, k) => addDays(t, k - 27));
+  const year = st.s.journal[addDays(t, -365)];
+  return sheetWrap("The moon-strip", `<p class="blurb">A dark moon for each night you came to the desk, over the last four weeks.</p>
+    <ol class="moons">${days.map((dk) => { const n = st.d.byDay[dk]?.length ?? 0, j = st.s.journal[dk]; return `<li class="${n || j ? "kept" : ""} ${dk === t ? "now" : ""}" title="${dk}"><i aria-hidden="true"></i><span>${Number(dk.slice(8))}</span><span class="sr">${n} logs${j ? ", journal written" : ""}</span></li>`; }).join("")}</ol>
+    ${year ? `<section class="card"><h3>On this night, a year ago</h3><p>${esc(year.text ?? "")}</p></section>` : ""}`);
+}
+function relicsSheet() {
+  const p = st.s.profile!, c = CALLING_BY_ID[p.calling];
+  const reached = EMBERS.flatMap((e) => [3, 6, 9].filter((n) => st.d.emberEarned[e.key] >= n).map((n) => `${e.name}, tier ${n / 3}`));
+  return sheetWrap("The relic jars", `${c ? `<p><b>${c.charm}.</b> ${c.charmText}</p>` : `<p>Your calling is settled on night 7 of your first week, and its charm with it.</p>`}
+    ${reached.length ? `<p class="label">Tiers reached</p><ul class="found">${reached.map((r) => `<li>${esc(r)}</li>`).join("")}</ul><p class="quiet">Choosing between a steady and a deep relic comes in a later build. Your jars are kept until then.</p>`
+      : `<p class="quiet">A jar is filled when an ember earns its third point by logging. The first one is waiting on the shelf.</p>`}`);
+}
+function packSheet() {
+  return sheetWrap("The crane bag", `<p class="blurb">Pack your whole Hollow into the bag, to keep it safe or carry it to another device.</p>
+    ${PREVIEW ? `<p class="quiet">This is the preview. Packing works in the installed app.</p>` : `<div class="row2"><button class="primary" data-act="backup">Pack the bag</button><label class="ghost filebtn">Unpack a bag<input type="file" accept=".thinplace,application/json" data-input="import" hidden/></label></div>`}
+    <p class="quiet">Unpacking blends a bag into this Hollow, so nothing here is lost. ${st.s.done.backup ? `Last packed ${fmtDate(st.s.done.backup)}.` : "Never packed yet."}</p>
+    <p class="label">Two candles</p><p class="quiet">Soon you'll light your phone's candle from your computer's, and they'll catch each other up whenever both are lit.</p>`);
+}
+function cairnSheet() {
+  const cs = st.s.cairn ?? [];
+  return sheetWrap("The sealed scroll", cs.length ? cs.map((c) => Date.now() >= c.opens ? `<section class="card"><h3>Opened</h3><p>“${esc(c.text)}”</p><p class="quiet">Written ${fmtDate(c.written)}.</p></section>` : `<section class="card cairn"><h3>Sealed in red</h3><p class="quiet">Written ${fmtDate(c.written)}. It opens on ${new Date(c.opens).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.</p></section>`).join("")
+    : `<p class="blurb">On the seventh night of your first week, you'll write one line to yourself. It's sealed here and opens next Samhain.</p>`);
+}
+function bookSheet() {
+  const found = st.d.openings.filter((o) => o.level > 1 && o.ts).map((o) => {
     const l = st.s.logs.find((x) => x.id === o.logId);
-    return `<li><b>${esc(bName(o.building))}</b> found ${fmtDate(o.ts!)}${l ? `, the day you logged “${esc(ACTION_BY_ID[l.action]?.name.toLowerCase() ?? "")}”` : ""}.</li>`;
+    return `<li><b>${esc(bName(o.building))}</b>, found ${fmtDate(o.ts!)}${l ? `, the day you logged “${esc(ACTION_BY_ID[l.action]?.name.toLowerCase() ?? "")}”` : ""}.</li>`;
   }).join("");
-  return `<section class="me">
-    <div class="portrait">${guiser({ ...opts, label: p.name })}<div><h2>${esc(p.name)}</h2><p class="sub">${esc(p.pronouns)} · ${c?.name ?? "Calling to be found"} · level ${d.level}</p>${c ? `<p class="motto">“${c.motto}”</p>` : ""}<button class="link" data-act="sheet" data-arg="look">Change your look</button></div></div>
-    <section class="card"><h3>Your bonfire</h3><div class="fire">${bonfire(d.ember, d.level, { labels: true })}</div>
-      <table class="embers"><tbody>${rows}</tbody></table>
-      ${!st.s.done.points ? `<button class="primary" data-act="task" data-arg="points">Spread your ${d.pointsLeft} starting points</button>` : ""}</section>
-    <section class="card"><h3>Calling charm</h3>${c ? `<p><b>${c.charm}.</b> ${c.charmText}</p>` : `<p>Your calling is settled on night 7 of your first week, from the questions by the hearth.</p>`}<p class="quiet">Relic choices arrive when an ember earns its third point by logging.</p></section>
-    <section class="card"><h3>Places you've found</h3>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Your Bothy is open. The next building is drawn in at level 2.</p>`}</section>
-    <section class="card"><h3>Settings</h3><button class="link" data-act="sheet" data-arg="settings">Day cutoff, backups and sync</button></section>
-  </section>`;
+  return sheetWrap("The Field Book", `<p class="blurb">Every place you find is written in here, dated to the day you found it.</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}`);
+}
+function notesSheet() {
+  return sheetWrap("A slip of reminders", `${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
 }
 
 // ---------- sheets ----------
@@ -285,8 +414,8 @@ function logResults() {
 }
 
 function logSheet() {
-  return sheetWrap("What did you do?", `
-    <label class="field"><span class="sr">Search what you did</span><input id="q" type="search" autocomplete="off" placeholder="Type it: ran, cooked, read…" value="${esc(st.q)}" data-input="q"/></label>
+  return sheetWrap("Into the mortar", `
+    <label class="field"><span class="sr">Search what you did</span><input id="q" type="search" autocomplete="off" placeholder="What did you do? ran, cooked, read…" value="${esc(st.q)}" data-input="q"/></label>
     <div class="chips"><button class="chip ${st.withSomeone ? "on" : ""}" data-act="with" aria-pressed="${st.withSomeone}">With someone</button>
     <input class="note" placeholder="Add a note (optional)" value="${esc(st.note)}" data-input="note" aria-label="Note"/></div>
     <div id="results">${logResults()}</div>`, { cls: "logsheet" });
@@ -307,7 +436,7 @@ function journalSheet() {
   const feel = dr.feel ?? j?.feel;
   const asked = questionCard();
   const fp = !asked ? folklorePrompt() : null;
-  return sheetWrap("Evening journal", `
+  return sheetWrap("By the candle", `
     ${asked}
     ${catchup ? `<p class="label">Anything you might have missed today?</p><div class="chips wrap">${catchup}</div>` : ""}
     <p class="label">How do you feel?</p><div class="chips wrap" role="radiogroup">${FEELINGS.map((f, i) => `<button class="chip ${feel === i ? "on" : ""}" role="radio" aria-checked="${feel === i}" data-act="feel" data-arg="${i}">${f}</button>`).join("")}</div>
@@ -396,7 +525,7 @@ function gateSheet() {
 function pointsSheet() {
   const p = st.s.profile!, start = startEmbers(p), left = START_POINTS - pointsSpent(p);
   const c = CALLING_BY_ID[p.calling];
-  return sheetWrap("Spread your ember points", `
+  return sheetWrap("Kindle your embers", `
     <p class="blurb">Every ember starts at 1${c ? `, and ${c.name} adds 2 to ${emberName(c.main)} and 1 to ${emberName(c.second)}` : ""}. Spread 14 more however feels true. Nothing can start above 6, and there's no respec later: a weak ember grows by doing.</p>
     <p class="left"><b>${left}</b> points left</p>
     <ul class="pts">${EMBERS.map((e) => `<li><div><b>${e.name}</b><small>${e.stands}</small></div>
@@ -413,7 +542,7 @@ const HABIT_SUGGESTIONS: [string, string, number][] = [
 
 function habitsSheet() {
   const active = st.s.habits.filter((h) => !h.archived);
-  return sheetWrap("Choose up to three habits", `
+  return sheetWrap("Up to three habits", `
     <p class="blurb">A habit is one tap a day on the calendar. It counts as a log, so it earns XP like anything else. Start small: three is plenty.</p>
     <ul class="hpick">${HABIT_SUGGESTIONS.map(([name, act, n]) => {
       const on = active.find((h) => h.action === act);
@@ -438,7 +567,7 @@ function installSheet() {
 
 function settingsSheet() {
   const c = st.s.settings.cutoffHour;
-  return sheetWrap("Settings", `
+  return sheetWrap("The iron key", `<p class="blurb">The rules of the house.</p>
     <p class="label">When does your day end?</p>
     <div class="chips wrap">${[2, 3, 4, 5, 6].map((h) => `<button class="chip ${c === h ? "on" : ""}" data-act="cutoff" data-arg="${h}">${h} am</button>`).join("")}</div>
     <p class="quiet">Logs before this time count toward the day before. Night owls move it later.</p>
@@ -452,7 +581,8 @@ function settingsSheet() {
 }
 
 function lookSheet() {
-  return sheetWrap("Your Scáth", lookPicker(st.s.profile!.look, st.s.profile!.calling, "look-") + `<button class="primary wide" data-act="close">Done</button>`);
+  const p = st.s.profile!, c = CALLING_BY_ID[p.calling];
+  return sheetWrap("The scrying bowl", `<p class="blurb">${esc(p.name)} · ${esc(p.pronouns)} · ${c ? esc(c.name) : "calling still to be found"}${c ? `. <em>“${esc(c.motto)}”</em>` : ""}</p>` + lookPicker(st.s.profile!.look, st.s.profile!.calling, "look-") + `<button class="primary wide" data-act="close">Done</button>`);
 }
 
 // Is a hood or staff yours yet? Starting items always are; the rest are earned.
@@ -523,6 +653,15 @@ function sheet() {
   if (sh === "install") return installSheet();
   if (sh === "settings") return settingsSheet();
   if (sh === "look") return lookSheet();
+  if (sh === "day") return daySheet();
+  if (sh === "tally") return tallySheet();
+  if (sh === "embers") return embersSheet();
+  if (sh === "moons") return moonsSheet();
+  if (sh === "relics") return relicsSheet();
+  if (sh === "pack") return packSheet();
+  if (sh === "cairn") return cairnSheet();
+  if (sh === "book") return bookSheet();
+  if (sh === "notes") return notesSheet();
   if ("found" in sh) return foundSheet(sh.found);
   if ("level" in sh) return levelSheet(sh.level);
   return "";
@@ -599,7 +738,7 @@ function render() {
     root.innerHTML = DEFS + intake();
     return;
   }
-  const main = st.view === "hollow" ? hollow() : st.view === "hearth" ? hearth() : me();
+  const main = st.view === "hollow" ? hollow() : bothyView();
   const sheetKey = JSON.stringify(st.sheet);
   root.innerHTML = `${DEFS}${topbar()}<main class="view ${st.view}">${main}</main>${nav()}${sheet()}${st.toast ? `<div class="toast" role="status">${esc(st.toast)}</div>` : ""}`;
   if (st.sheet === "log" && sheetKey !== lastSheetKey) {
@@ -608,6 +747,8 @@ function render() {
   }
   if (st.sheet && sheetKey !== lastSheetKey) (document.querySelector(".sheet") as HTMLElement | null)?.scrollTo(0, 0);
   if (document.getElementById("world")) attachWorld(worldHooks);
+  if (document.getElementById("room")) attachRoom();
+  if (document.getElementById("table")) attachTable();
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
     const sr = scene.getBoundingClientRect(), r = on.getBoundingClientRect();
@@ -620,7 +761,17 @@ function render() {
 async function onAct(act: string, arg: string, el: HTMLElement) {
   const it = st.intake;
   switch (act) {
-    case "view": if (arg === "hollow" && st.view === "hollow" && st.inside) { standAtDoor(st.inside); } st.inside = null; st.view = arg as View; st.sheet = null; break;
+    case "view":
+      if (arg === "hollow" && st.view === "hollow" && st.inside) standAtDoor(st.inside);
+      if (arg === "hollow" && st.view === "bothy") standAtDoor("bothy");
+      if (arg === "bothy" && st.view !== "bothy") { st.bothy = "room"; placeAt("desk"); st.stationAt = "desk"; st.s.done.roomVisits = (st.s.done.roomVisits ?? 0) + 1; save(st.s); }
+      st.inside = null; st.view = arg as View; st.sheet = null; break;
+    case "sit": sit(); return;
+    case "stand": st.bothy = "room"; placeAt("desk"); st.stationAt = "desk"; break;
+    case "names": st.names = !st.names; break;
+    case "spot": useSpot(arg); return;
+    case "leave-bothy": st.view = "hollow"; standAtDoor("bothy"); break;
+    case "station-go": { if (arg === "desk") { sit(); return; } placeAt(arg); st.stationAt = arg; break; }
     case "toggle-list": st.list = !st.list; break;
     case "open-log": st.q = ""; st.withSomeone = false; st.sheet = "log"; break;
     case "open-journal": st.journalDraft = { feel: undefined, text: "", blocker: "", ptext: "" }; st.reveal = 0; st.sheet = "journal"; break;
@@ -640,6 +791,7 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       const t = today();
       const existing = st.s.logs.find((l) => !l.deleted && l.habit === h.id && dayKey(l.ts, st.s.settings.cutoffHour) === t);
       if (existing) { await deleteLog(existing.id); return; }
+      st.motion.notch = performance.now();
       await logAction(h.action, { habit: h.id });
       return;
     }

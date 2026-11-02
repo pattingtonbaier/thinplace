@@ -27,7 +27,7 @@ function mul(a: number) {
 }
 const jit = (x: number, y: number) => [(h2(Math.round(x * 3), Math.round(y * 3)) - 0.5) * 1.5, (h2(Math.round(y * 3) + 7, Math.round(x * 3)) - 0.5) * 1.5];
 
-const PLOT: Record<string, [number, number]> = {
+export const PLOT: Record<string, [number, number]> = {
   "bothy": [17, 20], "stone-field": [10, 19], "ogham-tower": [23, 13], "forge": [11, 12], "craft-hall": [23, 20],
   "bards-lane": [13, 8], "wildwood": [7, 6], "feasting-halls": [23, 26], "market-square": [15, 27],
   "healing-well": [25, 5], "raven-post": [7, 26],
@@ -35,7 +35,7 @@ const PLOT: Record<string, [number, number]> = {
 const FIRE: Pt = [15, 16];
 const SPAWN: Pt = [17, 18];
 const HARBOUR_J = 28;
-const riverX = (j: number) => 31.2 + 1.5 * Math.sin(j / 4.2) + 0.6 * Math.sin(j / 1.7);
+export const riverX = (j: number) => 31.2 + 1.5 * Math.sin(j / 4.2) + 0.6 * Math.sin(j / 1.7);
 
 // 0 ground, 1 water, 2 path, 3 bridge, 4 field
 const T: number[][] = [...Array(N)].map(() => Array(N).fill(0));
@@ -280,7 +280,7 @@ function buildGround() {
 
 // ---------- signs ----------
 function tag(c: C, x: number, y: number, label: string, locked: boolean) {
-  c.font = "16px 'Patrick Hand SC','Gochi Hand',cursive";
+  c.font = "16px 'IM Fell English SC', Georgia, serif";
   const w = c.measureText(label).width + 24;
   c.save(); c.translate(x, y); c.rotate(-0.025);
   poly(c, [[-w / 2, -13], [w / 2, -13], [w / 2, 13], [-w / 2, 13]], locked ? "#e4e0d9" : "#f7f5f1", locked ? 1.4 : 2);
@@ -412,11 +412,15 @@ export const pl = { i: SPAWN[0] + 0.5, j: SPAWN[1] + 0.5, face: 1, moving: false
 const BODY = new Path2D("M60 26C82 28 88 52 86 70C90 96 94 118 90 128Q60 134 30 128C26 118 30 96 34 70C32 52 38 28 60 26Z");
 function drawPlayer(c: C, t: number, look: GuiserOpts) {
   const [x, y] = P(pl.i, pl.j);
-  const walk = pl.moving ? pl.step * 9 : 0;
-  const bob = pl.moving ? Math.abs(Math.sin(walk)) * 2.2 : Math.sin(t * 2) * 0.5;
-  const sw = pl.moving ? Math.sin(walk) * 7 : 0;
-  ellipse(c, x, y + 1, 13, 5, "rgba(60,56,52,.28)");
-  c.save(); c.translate(x, y - bob); const sc = 0.42; c.scale(pl.face * sc, sc); c.translate(-60, -136);
+  drawScath(c, x, y, 0.42, t, look, pl.moving, pl.step, pl.face);
+}
+// The Scáth at a point on screen, walking or standing. Shared by the Hollow and the Bothy.
+export function drawScath(c: C, x: number, y: number, sc: number, t: number, look: GuiserOpts, moving: boolean, step: number, face: number) {
+  const walk = moving ? step * 9 : 0;
+  const bob = moving ? Math.abs(Math.sin(walk)) * 2.2 * sc / 0.42 : Math.sin(t * 2) * 0.5;
+  const sw = moving ? Math.sin(walk) * 7 : 0;
+  ellipse(c, x, y + 1, 31 * sc, 12 * sc, "rgba(60,56,52,.28)");
+  c.save(); c.translate(x, y - bob); c.scale(face * sc, sc); c.translate(-60, -136);
   c.globalAlpha = 0.22; ellipse(c, 60, 82, 36, 46, look.glow ?? "#f2b84b"); c.globalAlpha = 1;
   if (look.staff) drawStaff(c, look.staff);
   // legs swing as you walk, so the Scáth walks instead of gliding

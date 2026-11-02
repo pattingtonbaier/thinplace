@@ -1,10 +1,10 @@
 /* Thinplace: ink on paper, one red accent for things that need you. */
 :root {
   color-scheme: light;
-  --table: #d6d1c9; --paper: #efece6; --paper2: #f5f3ee; --ink: #1e1c1a; --soft: #5f5b55; --rule: #c9c4bb;
+  --table: #cbc5bb; --paper: #ece6da; --paper2: #f4efe5; --ink: #1e1c1a; --soft: #5a554e; --rule: #c4bcae;
   --red: #d2483a; --amber: #6f6b65;
-  --f-caps: "Patrick Hand SC", "Gochi Hand", "Comic Sans MS", cursive;
-  --f-hand: "Gochi Hand", "Comic Sans MS", cursive;
+  --f-caps: "IM Fell English SC", "IM Fell English", Georgia, "Times New Roman", serif;
+  --f-hand: "IM Fell English", Georgia, "Times New Roman", serif;
   --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --wob: 255px 14px 225px 16px / 16px 225px 14px 255px;
   --tabs: 68px;
@@ -58,7 +58,7 @@ h3 { font-size: 20px; margin-bottom: 6px; }
 .who small { grid-column: 1 / -1; font: 400 12px var(--f-mono); color: var(--soft); }
 .xpbar { grid-column: 1 / -1; height: 9px; border: 2px solid var(--ink); border-radius: 6px; background: #fbfaf6; overflow: hidden; margin-top: 4px; }
 .xpbar span { display: block; height: 100%; background: var(--amber); transition: width .5s; }
-.tabs { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: inherit; z-index: 6; display: grid; grid-template-columns: 1fr 1.3fr 1fr 1fr; align-items: center; gap: 4px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--paper); border-top: 2.5px solid var(--ink); }
+.tabs { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: inherit; z-index: 6; display: grid; grid-template-columns: 1fr 1.4fr 1fr; align-items: center; gap: 4px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--paper); border-top: 2.5px solid var(--ink); }
 #app .tabs { max-width: 560px; }
 @media (min-width: 900px) { #app .tabs { max-width: 980px; } }
 .tab { background: none; border: 0; display: flex; flex-direction: column; align-items: center; font: 400 15px var(--f-caps); letter-spacing: .05em; color: var(--soft); min-height: 48px; justify-content: center; }
@@ -248,3 +248,28 @@ input::placeholder, textarea::placeholder { color: #8a8580; -webkit-text-fill-co
 .chip.locked small { font-size: .75em; color: var(--muted, #6d6862); }
 .locked-set { margin: 6px 0 10px; }
 .locked-set summary { cursor: pointer; color: var(--muted, #6d6862); font-size: .9em; }
+
+/* ---------- the old work: the Bothy room and the working table ---------- */
+body { background-image: radial-gradient(rgba(30,28,26,.05) 1px, transparent 1px); background-size: 22px 22px; }
+#app { box-shadow: 0 0 0 1px rgba(30,28,26,.08), 0 12px 40px rgba(30,28,26,.18); }
+.sheet { background: var(--paper2) linear-gradient(180deg, rgba(120,100,70,.05), rgba(120,100,70,0) 120px); }
+.blurb em, .motto { font-style: italic; }
+.bothy-room, .table-view { padding: 10px max(12px, env(safe-area-inset-left, 0px)) 16px; }
+.bothy-room .inhead, .table-view .inhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.table-view .row { display: flex; gap: 8px; }
+.table-view .row .ghost { padding: 6px 12px; min-height: 40px; font-size: 16px; }
+#room, #table { display: block; width: 100%; border: 2.5px solid var(--ink); border-radius: var(--wob); background: #d4cfc7; touch-action: manipulation; }
+#table { background: #aaa49b; }
+.station { margin-top: 12px; }
+details.plain { margin-top: 12px; }
+details.plain summary { cursor: pointer; color: var(--soft); font: 400 16px var(--f-caps); letter-spacing: .05em; padding: 6px 0; }
+.moons { list-style: none; padding: 0; margin: 12px 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.moons li { display: grid; justify-items: center; gap: 2px; font: 400 13px var(--f-mono); color: var(--soft); }
+.moons i { width: 22px; height: 22px; border-radius: 50%; border: 1.6px solid var(--ink); }
+.moons li.kept i { background: #3a3733; }
+.moons li.now i { box-shadow: 0 0 0 3px var(--paper2), 0 0 0 5px var(--red); }
+@media (min-width: 900px) { .bothy-room, .table-view { max-width: 900px; margin: 0 auto; } }
+#table, #room { margin-inline: auto; }
+#table { max-width: min(100%, calc(100dvh - 230px)); }
+@media (max-width: 480px) { .bothy-room h2, .table-view h2 { font-size: 22px; } }
+#room { max-width: min(100%, calc((100dvh - 300px) * 1.5)); }

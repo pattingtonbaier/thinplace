@@ -19,6 +19,6 @@ const html = readFileSync("index.html", "utf8")
 writeFileSync("dist/preview.html", html);
 
 // The claude.ai artifact version: the page body only, since the host adds the document skeleton.
-const fonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand+SC&family=Gochi+Hand&family=IBM+Plex+Mono:wght@400;600&display=swap">';
+const fonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=IBM+Plex+Mono:wght@400;600&display=swap">';
 writeFileSync("dist/artifact.html", `<title>Thinplace</title>\n${fonts}\n<style>${css}</style>\n<div id="app"><p style="padding:24px">Opening your Hollow…</p></div>\n<script type="module">${js}</script>\n`);
 console.log("built", (js.length / 1024).toFixed(1) + " KB js");
