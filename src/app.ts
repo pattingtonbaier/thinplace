@@ -9,11 +9,12 @@ import {
   startEmbers, uid, weekStart, type Derived, type Habit, type Log, type Profile, type Save,
 } from "./engine";
 import { exportBackup, importBackup, load, persist, save } from "./store";
+import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForDay, PROMPTS, suggestCalling, suggestPoints } from "./quiz";
 
 // ---------- state ----------
 type View = "hollow" | "hearth" | "me";
 type Sheet =
-  | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look"
+  | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
   | { found: BuildingId } | { level: number };
 
 const st = {
@@ -23,7 +24,7 @@ const st = {
   sheet: null as Sheet,
   queue: [] as Sheet[], // celebrations waiting their turn
   list: false,
-  intake: { step: 0, name: "", pronouns: "", calling: "", look: { hood: "ink", satchel: "satchel", staff: "rowan", glow: "amber" } },
+  intake: { step: 0, name: "", pronouns: "", calling: "", anchors: {} as Record<string, number>, unusual: false, points: {} as Partial<Record<Ember, number>>, look: { hood: "ink", satchel: "satchel", staff: "rowan", glow: "amber" } },
   q: "",
   withSomeone: false,
   note: "",
@@ -31,7 +32,9 @@ const st = {
   inside: null as BuildingId | null,
   station: 0,
   near: null as BuildingId | null,
-  journalDraft: { feel: undefined as number | undefined, text: "", blocker: "" },
+  journalDraft: { feel: undefined as number | undefined, text: "", blocker: "", ptext: "" },
+  reveal: 0, // the night whose tale was just revealed
+  cairnDraft: "",
   installEvt: null as any,
 };
 
@@ -112,7 +115,7 @@ function xpBar() {
 function topbar() {
   const p = st.s.profile!;
   return `<header class="top">
-    <div class="who"><b>${esc(p.name)}</b><span>Level ${st.d.level} · ${CALLING_BY_ID[p.calling]?.name ?? ""}</span>${xpBar()}<small>${st.d.into} / ${st.d.need} XP</small></div>
+    <div class="who"><b>${esc(p.name)}</b><span>Level ${st.d.level} · ${CALLING_BY_ID[p.calling]?.name ?? "Finding your calling"}</span>${xpBar()}<small>${st.d.into} / ${st.d.need} XP</small></div>
     <button class="ghost" data-act="toggle-list" aria-pressed="${st.list}">${st.list ? "Map" : "List"}</button>
   </header>`;
 }
@@ -225,6 +228,8 @@ function hearth() {
       ${j ? `<p>${j.feel !== undefined ? `<b>${FEELINGS[j.feel]}.</b> ` : ""}${esc(j.text ?? "")}</p><button class="link" data-act="open-journal">Add to tonight's entry</button>`
         : `<p class="quiet">Three small prompts, and a catch-up for anything you missed. Then the Hollow closes the gate.</p><button class="primary" data-act="open-journal">Open the journal</button>`}
     </section>
+    ${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}
+    ${(st.s.cairn ?? []).map((c) => Date.now() >= c.opens ? `<section class="card"><h3>A letter from the cairn</h3><p>“${esc(c.text)}”</p><p class="quiet">Written ${fmtDate(c.written)}.</p></section>` : `<section class="card cairn"><h3>A cairn by the hearth</h3><p class="quiet">Sealed until ${new Date(c.opens).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.</p></section>`).join("")}
     ${year ? `<section class="card"><h3>On this day, a year ago</h3><p>${esc(year.text ?? "")}</p></section>` : ""}
     <section class="card"><h3>Today</h3>${todayLogs()}</section>
   </section>`;
@@ -243,11 +248,11 @@ function me() {
     return `<li><b>${esc(bName(o.building))}</b> found ${fmtDate(o.ts!)}${l ? `, the day you logged “${esc(ACTION_BY_ID[l.action]?.name.toLowerCase() ?? "")}”` : ""}.</li>`;
   }).join("");
   return `<section class="me">
-    <div class="portrait">${guiser({ ...opts, label: p.name })}<div><h2>${esc(p.name)}</h2><p class="sub">${esc(p.pronouns)} · ${c?.name} · level ${d.level}</p><p class="motto">“${c?.motto}”</p><button class="link" data-act="sheet" data-arg="look">Change your look</button></div></div>
+    <div class="portrait">${guiser({ ...opts, label: p.name })}<div><h2>${esc(p.name)}</h2><p class="sub">${esc(p.pronouns)} · ${c?.name ?? "Calling to be found"} · level ${d.level}</p>${c ? `<p class="motto">“${c.motto}”</p>` : ""}<button class="link" data-act="sheet" data-arg="look">Change your look</button></div></div>
     <section class="card"><h3>Your bonfire</h3><div class="fire">${bonfire(d.ember, d.level, { labels: true })}</div>
       <table class="embers"><tbody>${rows}</tbody></table>
       ${!st.s.done.points ? `<button class="primary" data-act="task" data-arg="points">Spread your ${d.pointsLeft} starting points</button>` : ""}</section>
-    <section class="card"><h3>Calling charm</h3><p><b>${c?.charm}.</b> ${c?.charmText}</p><p class="quiet">Relic choices arrive when an ember earns its third point by logging.</p></section>
+    <section class="card"><h3>Calling charm</h3>${c ? `<p><b>${c.charm}.</b> ${c.charmText}</p>` : `<p>Your calling is settled on night 7 of your first week, from the questions by the hearth.</p>`}<p class="quiet">Relic choices arrive when an ember earns its third point by logging.</p></section>
     <section class="card"><h3>Places you've found</h3>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Your Bothy is open. The next building is drawn in at level 2.</p>`}</section>
     <section class="card"><h3>Settings</h3><button class="link" data-act="sheet" data-arg="settings">Day cutoff, backups and sync</button></section>
   </section>`;
@@ -298,13 +303,85 @@ function journalSheet() {
     ...usual.map((k) => `<button class="chip" data-act="log" data-arg="${k}">${esc(ACTION_BY_ID[k].name)}?</button>`),
   ].join("");
   const feel = dr.feel ?? j?.feel;
+  const asked = questionCard();
+  const fp = !asked ? folklorePrompt() : null;
   return sheetWrap("Evening journal", `
+    ${asked}
     ${catchup ? `<p class="label">Anything you might have missed today?</p><div class="chips wrap">${catchup}</div>` : ""}
     <p class="label">How do you feel?</p><div class="chips wrap" role="radiogroup">${FEELINGS.map((f, i) => `<button class="chip ${feel === i ? "on" : ""}" role="radio" aria-checked="${feel === i}" data-act="feel" data-arg="${i}">${f}</button>`).join("")}</div>
     <label class="field"><span class="label">What did today hold?</span><textarea rows="4" data-input="jtext" placeholder="A line is enough.">${esc(dr.text || j?.text || "")}</textarea></label>
     <p class="label">What got in the way? <small>(optional, skip any time)</small></p>
     <div class="chips wrap">${BLOCKERS.map((b) => `<button class="chip ${(dr.blocker || j?.blocker) === b.id ? "on" : ""}" data-act="blocker" data-arg="${b.id}">${b.name}</button>`).join("")}</div>
+    ${fp ? `<section class="folk"><p class="label">From the old tales <small>(optional)</small></p><p class="tale">${esc(fp.prompt.tale)}</p>
+      ${fp.last ? `<p class="quiet">Last time you wrote: “${esc(fp.last)}”. What's changed?</p>` : ""}
+      <label class="field"><span class="label">${esc(fp.prompt.q)}</span><textarea rows="2" data-input="ptext">${esc(dr.ptext || j?.prompt?.answer || "")}</textarea></label></section>` : ""}
     <button class="primary wide" data-act="save-journal">Close the gate for tonight</button>`);
+}
+
+const dayNum = (key: string) => Math.round(Date.parse(key + "T12:00:00") / 864e5);
+
+function quizState() {
+  const q = st.s.quiz;
+  if (!q) return null;
+  const answered = Object.keys(q.dilemmas).length, t = today();
+  const answeredTonight = Object.values(q.nights).includes(t);
+  return { q, answered, t, answeredTonight };
+}
+
+// One dilemma a night in the first week; the mirror after night 7.
+function questionCard(): string {
+  const qs = quizState();
+  if (!qs) return "";
+  const { q, answered, answeredTonight } = qs;
+  if (st.reveal) {
+    const d = DILEMMAS.find((x) => x.night === st.reveal)!;
+    const tail = d.night < 7 ? "" : q.mirror === undefined
+      ? `<p class="label">One last question</p><p class="aq">${esc(MIRROR.q)}</p><div class="chips wrap">${MIRROR.options.map((o, i) => `<button class="chip" data-act="mirror" data-arg="${i}">${esc(o)}</button>`).join("")}</div>`
+      : `<p>Your seven nights are done.</p><button class="ghost" data-act="sheet" data-arg="firstweek">Read your first week back</button>`;
+    return `<section class="ask done"><p class="label">Tonight's question · night ${d.night} of 7</p><p class="aq">${esc(d.q)}</p><p class="chosen">You chose: <b>${esc(d.options[q.dilemmas[d.night]].label)}</b></p><p class="tale">${esc(d.reveal)}</p>${tail}</section>`;
+  }
+  if (answered < 7 && !answeredTonight) {
+    const d = DILEMMAS[answered];
+    return `<section class="ask"><p class="label">Tonight's question · night ${d.night} of 7</p><p class="aq">${esc(d.q)}</p>
+      <div class="chips wrap">${d.options.map((o, i) => `<button class="chip" data-act="dilemma" data-arg="${i}">${esc(o.label)}</button>`).join("")}</div>
+      <p class="quiet">There's no better answer. Each one leans a different way.</p></section>`;
+  }
+  if (answered >= 7 && q.mirror === undefined) {
+    return `<section class="ask"><p class="label">One last question</p><p class="aq">${esc(MIRROR.q)}</p>
+      <div class="chips wrap">${MIRROR.options.map((o, i) => `<button class="chip" data-act="mirror" data-arg="${i}">${esc(o)}</button>`).join("")}</div></section>`;
+  }
+  if (q.mirror !== undefined && !q.settled) return `<section class="ask"><p class="label">Your first week</p><p>Your seven nights are done.</p><button class="ghost" data-act="sheet" data-arg="firstweek">Read it back</button></section>`;
+  return "";
+}
+
+function folklorePrompt() {
+  const p = st.s.profile!;
+  if (!PROMPTS[p.calling] || !st.s.quiz?.settled) return null;
+  const history = Object.entries(st.s.journal).filter(([, e]) => e.prompt).map(([k, e]) => ({ id: e.prompt!.id, day: dayNum(k), answer: e.prompt!.answer })).sort((a, b) => a.day - b.day);
+  const t = today(), dn = dayNum(t);
+  const tonight = st.s.journal[t]?.prompt;
+  if (tonight) {
+    const pr = PROMPTS[p.calling].find((x) => x.id === tonight.id);
+    return pr ? { prompt: pr, last: undefined } : null;
+  }
+  return promptForDay(p.calling, dn - dayNum(dayKey(st.s.created, st.s.settings.cutoffHour)), history);
+}
+
+function firstWeekSheet() {
+  const q = st.s.quiz!, p = st.s.profile!;
+  const g = gaps(q.anchors, q.dilemmas, q.mirror);
+  const suggested = suggestCalling(dilemmaTally(q.dilemmas)), cur = CALLING_BY_ID[p.calling], sug = CALLING_BY_ID[suggested];
+  const choice = (c: typeof sug, label: string, primary: boolean) => `<button class="${primary ? "primary" : "ghost"}" data-act="settle" data-arg="${c.id}">${label}</button>`;
+  return sheetWrap("Your first week", `
+    <p class="blurb">Seven nights of questions, set beside your usual fortnight.</p>
+    ${g.length ? `<p class="label">Two things pulled in different directions</p><ul class="gaps">${g.map((x) => `<li>${esc(x[0].toUpperCase() + x.slice(1))}</li>`).join("")}</ul><p>That gap is where your Hollow begins. Which feels truer right now? Your embers already follow your fortnight; your calling can follow who you'd choose to be.</p>`
+      : `<p>Your answers and your fortnight line up closely. That's rare, and it means your Hollow starts on solid ground.</p>`}
+    <p class="label">Your calling</p>
+    <p>Your answers lean towards <b>${sug.name}</b>: ${emberName(sug.main)} first, then ${emberName(sug.second)}. “${sug.motto}”</p>
+    <div class="row2">${cur && cur.id !== sug.id ? choice(cur, `Keep ${cur.name}`, false) + choice(sug, `Become ${sug.name}`, true) : choice(sug, cur ? `Keep ${sug.name}` : `Become ${sug.name}`, true)}</div>
+    <details class="others"><summary>Or choose another calling</summary><div class="chips wrap">${CALLINGS.filter((c) => c.id !== sug.id).map((c) => `<button class="chip" data-act="settle" data-arg="${c.id}">${c.name}</button>`).join("")}</div></details>
+    <label class="field"><span class="label">One line to yourself, a year from now</span><textarea rows="2" data-input="cairn" placeholder="It's sealed in a cairn and opens next Samhain.">${esc(st.cairnDraft)}</textarea></label>
+    <p class="quiet">Switching is free, this once. The +2 and +1 move with your calling. These seven questions come back each Samhain, so you can see how your answers move.</p>`);
 }
 
 function gateSheet() {
@@ -318,7 +395,7 @@ function pointsSheet() {
   const p = st.s.profile!, start = startEmbers(p), left = START_POINTS - pointsSpent(p);
   const c = CALLING_BY_ID[p.calling];
   return sheetWrap("Spread your ember points", `
-    <p class="blurb">Every ember starts at 1, and ${c.name} adds 2 to ${emberName(c.main)} and 1 to ${emberName(c.second)}. Spread 14 more however feels true. Nothing can start above 6, and there's no respec later: a weak ember grows by doing.</p>
+    <p class="blurb">Every ember starts at 1${c ? `, and ${c.name} adds 2 to ${emberName(c.main)} and 1 to ${emberName(c.second)}` : ""}. Spread 14 more however feels true. Nothing can start above 6, and there's no respec later: a weak ember grows by doing.</p>
     <p class="left"><b>${left}</b> points left</p>
     <ul class="pts">${EMBERS.map((e) => `<li><div><b>${e.name}</b><small>${e.stands}</small></div>
       <button class="step" data-act="pt" data-arg="${e.key}:-1" aria-label="Less ${e.name}" ${(p.points[e.key] ?? 0) <= 0 ? "disabled" : ""}>−</button>
@@ -409,6 +486,7 @@ function sheet() {
   if (sh === "journal") return journalSheet();
   if (sh === "gate") return gateSheet();
   if (sh === "points") return pointsSheet();
+  if (sh === "firstweek") return firstWeekSheet();
   if (sh === "habits") return habitsSheet();
   if (sh === "install") return installSheet();
   if (sh === "settings") return settingsSheet();
@@ -421,8 +499,8 @@ function sheet() {
 // ---------- intake ----------
 function intake() {
   const it = st.intake;
-  const steps = ["You", "Calling", "Your Scáth"];
-  const dots = `<ol class="dots" aria-label="Step ${it.step + 1} of 3">${steps.map((s, i) => `<li class="${i === it.step ? "on" : i < it.step ? "done" : ""}">${s}</li>`).join("")}</ol>`;
+  const steps = ["You", "Calling", "Look", "Fortnight", "Embers"];
+  const dots = `<ol class="dots" aria-label="Step ${it.step + 1} of ${steps.length}">${steps.map((s, i) => `<li class="${i === it.step ? "on" : i < it.step ? "done" : ""}">${s}</li>`).join("")}</ol>`;
   let body = "";
   if (it.step === 0) {
     body = `<div class="hello">${guiser({ glowSize: 1.1, label: "A Scáth at the thin place" })}<div>
@@ -435,9 +513,29 @@ function intake() {
     body = `<h2>Choose a calling</h2><p class="blurb">A calling shapes your start without locking anything. You can rename its title later.</p>
       <ul class="callings">${CALLINGS.map((c) => `<li><button class="calling ${it.calling === c.id ? "on" : ""}" data-act="calling" data-arg="${c.id}" aria-pressed="${it.calling === c.id}">
         <b>${c.name}</b><span>Leans on ${emberName(c.main)} and ${emberName(c.second)} · ${c.charm}</span><em>${c.motto}</em></button></li>`).join("")}</ul>
-      <div class="row2"><button class="ghost" data-act="surprise">Surprise me</button><button class="primary" data-act="intake-next" ${it.calling ? "" : "disabled"}>Next</button></div>`;
+      <div class="row2"><button class="ghost" data-act="surprise">Surprise me</button><button class="ghost ${it.calling === "later" ? "on" : ""}" data-act="calling-later" aria-pressed="${it.calling === "later"}">Decide after my first week</button></div>
+      ${it.calling === "later" ? `<p class="quiet">Each evening of your first week, the hearth asks one question. On night 7 they suggest a calling.</p>` : ""}
+      <button class="primary wide" data-act="intake-next" ${it.calling ? "" : "disabled"}>Next</button>`;
+  } else if (it.step === 2) {
+    body = `<h2>Make your Scáth yours</h2>${lookPicker(it.look, it.calling === "later" ? "" : it.calling, "in-")}<button class="primary wide" data-act="intake-next">Next</button>`;
+  } else if (it.step === 3) {
+    const done = ANCHORS.every((a) => it.anchors[a.id] !== undefined);
+    body = `<h2>Your usual fortnight</h2><p class="blurb">Not your best two weeks, and not your worst. These set where your embers start, so honest beats impressive.</p>
+      ${ANCHORS.map((a) => `<p class="label">${esc(a.q)}</p><div class="chips wrap" role="radiogroup">${a.options.map((o, i) => `<button class="chip ${it.anchors[a.id] === i ? "on" : ""}" role="radio" aria-checked="${it.anchors[a.id] === i}" data-act="anc" data-arg="${a.id}:${i}">${esc(o.label)}</button>`).join("")}</div>`).join("")}
+      <div class="chips"><button class="chip ${it.unusual ? "on" : ""}" data-act="unusual" aria-pressed="${it.unusual}">These two weeks were unusual for me</button></div>
+      <button class="primary wide" data-act="intake-next" ${done ? "" : "disabled"}>See my embers</button>`;
   } else {
-    body = `<h2>Make your Scáth yours</h2>${lookPicker(it.look, it.calling, "in-")}<button class="primary wide" data-act="intake-finish">Step into the Hollow</button>`;
+    const calling = it.calling === "later" ? "" : it.calling;
+    const start = startEmbers({ name: "", pronouns: "", look: it.look, calling, points: it.points, updated: 0 });
+    const left = START_POINTS - Object.values(it.points).reduce((n, v) => n + (v ?? 0), 0);
+    body = `<h2>Your embers</h2><p class="blurb">Your answers suggest this spread of your 14 starting points. Adjust it if it doesn't feel true. Nothing starts above 6, and there's no respec later: a weak ember grows by doing.</p>
+      <div class="fire">${bonfire(start, 1, { labels: true })}</div>
+      <p class="left"><b>${left}</b> points left</p>
+      <ul class="pts">${EMBERS.map((e) => `<li><div><b>${e.name}</b><small>${e.stands}</small></div>
+        <button class="step" data-act="ipt" data-arg="${e.key}:-1" aria-label="Less ${e.name}" ${(it.points[e.key] ?? 0) <= 0 ? "disabled" : ""}>−</button>
+        <span class="num">${start[e.key]}</span>
+        <button class="step" data-act="ipt" data-arg="${e.key}:1" aria-label="More ${e.name}" ${left <= 0 || start[e.key] >= START_CAP ? "disabled" : ""}>＋</button></li>`).join("")}</ul>
+      <button class="primary wide" data-act="intake-finish">Step into the Hollow</button>`;
   }
   return `<main class="intake">${dots}${body}${it.step > 0 ? `<button class="link back" data-act="intake-back">Back</button>` : ""}</main>`;
 }
@@ -493,7 +591,7 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "view": if (arg === "hollow" && st.view === "hollow" && st.inside) { standAtDoor(st.inside); } st.inside = null; st.view = arg as View; st.sheet = null; break;
     case "toggle-list": st.list = !st.list; break;
     case "open-log": st.q = ""; st.withSomeone = false; st.sheet = "log"; break;
-    case "open-journal": st.journalDraft = { feel: undefined, text: "", blocker: "" }; st.sheet = "journal"; break;
+    case "open-journal": st.journalDraft = { feel: undefined, text: "", blocker: "", ptext: "" }; st.reveal = 0; st.sheet = "journal"; break;
     case "close": st.sheet = null; nextSheet(); break;
     case "next": nextSheet(); break;
     case "sheet": st.sheet = arg as Sheet; break;
@@ -514,11 +612,46 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       return;
     }
     case "feel": st.journalDraft.feel = Number(arg); break;
+    case "dilemma": {
+      const q = st.s.quiz!, night = Object.keys(q.dilemmas).length + 1;
+      keepJournalDraft();
+      q.dilemmas[night] = Number(arg);
+      q.nights[night] = today();
+      q.updated = Date.now();
+      st.reveal = night;
+      await commit();
+      break;
+    }
+    case "mirror": { const q = st.s.quiz!; keepJournalDraft(); q.mirror = Number(arg); q.updated = Date.now(); await commit(); break; }
+    case "settle": {
+      const p = st.s.profile!, q = st.s.quiz!;
+      const line = ((document.querySelector("[data-input=cairn]") as HTMLTextAreaElement)?.value ?? st.cairnDraft).trim();
+      if (line) {
+        const now = Date.now(), y = new Date().getFullYear();
+        let opens = new Date(y, 9, 31, 18).getTime();
+        if (opens - now < 200 * 864e5) opens = new Date(y + 1, 9, 31, 18).getTime();
+        (st.s.cairn ??= []).push({ text: line, written: now, opens });
+      }
+      const changed = p.calling !== arg;
+      p.calling = arg;
+      p.updated = Date.now();
+      q.settled = Date.now();
+      q.updated = Date.now();
+      st.cairnDraft = "";
+      await commit();
+      st.sheet = null;
+      toast(changed ? `You are ${CALLING_BY_ID[arg].name} now.` : `${CALLING_BY_ID[arg].name} it is.`);
+      return;
+    }
     case "blocker": st.journalDraft.blocker = st.journalDraft.blocker === arg ? "" : arg; break;
     case "save-journal": {
       const t = today(), dr = st.journalDraft, prev = st.s.journal[t];
       const text = (document.querySelector("[data-input=jtext]") as HTMLTextAreaElement)?.value ?? dr.text;
-      st.s.journal[t] = { feel: dr.feel ?? prev?.feel, text: text.trim(), blocker: dr.blocker || prev?.blocker, updated: Date.now() };
+      const pt = ((document.querySelector("[data-input=ptext]") as HTMLTextAreaElement)?.value ?? "").trim();
+      const fp = folklorePrompt();
+      st.s.journal[t] = { feel: dr.feel ?? prev?.feel, text: text.trim(), blocker: dr.blocker || prev?.blocker, updated: Date.now(),
+        ...(fp && pt ? { prompt: { id: fp.prompt.id, answer: pt } } : prev?.prompt ? { prompt: prev.prompt } : {}) };
+      st.reveal = 0;
       const already = (st.d.byDay[t] ?? []).some((l) => l.action === "journal");
       if (!already) st.s.logs.push({ id: uid(), ts: Date.now(), action: "journal" });
       await commit();
@@ -571,6 +704,18 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       it.look = { ...it.look, staff: c.staff, satchel: c.satchel };
       break;
     }
+    case "calling-later": it.calling = "later"; break;
+    case "anc": { const [id, i] = arg.split(":"); it.anchors[id] = Number(i); break; }
+    case "unusual": it.unusual = !it.unusual; break;
+    case "ipt": {
+      const [k, dlt] = arg.split(":"), e = k as Ember;
+      const start = startEmbers({ name: "", pronouns: "", look: it.look, calling: it.calling === "later" ? "" : it.calling, points: it.points, updated: 0 });
+      const spent = Object.values(it.points).reduce((n, v) => n + (v ?? 0), 0);
+      const cur = it.points[e] ?? 0, next = cur + Number(dlt);
+      if (next < 0 || (Number(dlt) > 0 && (spent >= START_POINTS || start[e] >= START_CAP))) return;
+      it.points = { ...it.points, [e]: next };
+      break;
+    }
     case "surprise": {
       const c = CALLINGS[Math.floor(Math.random() * CALLINGS.length)];
       it.calling = c.id;
@@ -578,11 +723,22 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       break;
     }
     case "in-hood": case "in-satchel": case "in-staff": case "in-glow": it.look = { ...it.look, [act.slice(3)]: arg }; break;
-    case "intake-next": it.step++; break;
+    case "intake-next": {
+      if (it.step === 3) {
+        const calling = it.calling === "later" ? "" : it.calling;
+        const base = startEmbers({ name: "", pronouns: "", look: it.look, calling, points: {}, updated: 0 });
+        it.points = suggestPoints(anchorScores(it.anchors, it.unusual), base);
+      }
+      it.step++;
+      break;
+    }
     case "intake-back": it.step = Math.max(0, it.step - 1); break;
     case "intake-finish": {
-      st.s.profile = { name: it.name.trim(), pronouns: it.pronouns.trim(), calling: it.calling, look: it.look, points: {}, updated: Date.now() };
-      st.s.created = Date.now();
+      const now = Date.now();
+      st.s.profile = { name: it.name.trim(), pronouns: it.pronouns.trim(), calling: it.calling === "later" ? "" : it.calling, look: it.look, points: it.points, updated: now };
+      st.s.created = now;
+      st.s.done.points = now;
+      st.s.quiz = { anchors: it.anchors, unusual: it.unusual, dilemmas: {}, nights: {}, updated: now };
       await commit();
       persist();
       st.view = "hollow";
@@ -604,6 +760,8 @@ function onInput(key: string, el: HTMLInputElement | HTMLTextAreaElement) {
   }
   if (key === "note") { st.note = v; return; }
   if (key === "jtext") { st.journalDraft.text = v; return; }
+  if (key === "ptext") { st.journalDraft.ptext = v; return; }
+  if (key === "cairn") { st.cairnDraft = v; return; }
   if (key === "name") { st.intake.name = v; toggleNext(); return; }
   if (key === "pron-own") {
     st.intake.pronouns = v;
@@ -668,4 +826,11 @@ export async function start() {
     if (el.dataset.input === "import") onFile(el);
   });
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); st.installEvt = e; });
+}
+
+function keepJournalDraft() {
+  const t = document.querySelector("[data-input=jtext]") as HTMLTextAreaElement | null;
+  if (t) st.journalDraft.text = t.value;
+  const p = document.querySelector("[data-input=ptext]") as HTMLTextAreaElement | null;
+  if (p) st.journalDraft.ptext = p.value;
 }

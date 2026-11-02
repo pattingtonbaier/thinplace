@@ -227,3 +227,16 @@ h3 { font-size: 20px; margin-bottom: 6px; }
 html { color-scheme: light; }
 input, textarea, select { color: var(--ink); -webkit-text-fill-color: var(--ink); caret-color: var(--ink); color-scheme: light; }
 input::placeholder, textarea::placeholder { color: #8a8580; -webkit-text-fill-color: #8a8580; opacity: 1; }
+
+/* the first-week questions and folklore prompts */
+.ghost.on { background: var(--ink); color: var(--paper); }
+.ask { border: 2px dashed var(--ink); border-radius: 14px; padding: 10px 14px; margin: 6px 0 4px; background: #f8f1df; }
+.ask .label { margin-top: 0; }
+.aq { font: 400 21px/1.25 var(--f-hand); margin: 4px 0; }
+.chosen { margin: 4px 0; }
+.tale { font-style: italic; color: #4a4640; margin: 6px 0; }
+.gaps { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 6px; }
+.folk { border-top: 1.5px dashed var(--rule); margin-top: 14px; }
+.others { margin-top: 10px; }
+.others summary { cursor: pointer; text-decoration: underline wavy var(--rule); text-underline-offset: 4px; }
+.cairn { border-style: dashed; }

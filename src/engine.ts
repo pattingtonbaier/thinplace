@@ -47,6 +47,7 @@ export interface Log {
 
 export interface JournalEntry {
   feel?: number;
+  prompt?: { id: string; answer: string };
   text?: string;
   blocker?: string;
   updated: number;
@@ -63,6 +64,18 @@ export interface Save {
   journal: Record<string, JournalEntry>;
   settings: { cutoffHour: number; nudges: boolean; updated: number };
   done: Record<string, number>; // first-week tasks and other one-off moments
+  quiz?: Quiz;
+  cairn?: { text: string; written: number; opens: number }[];
+}
+
+export interface Quiz {
+  anchors: Record<string, number>;
+  unusual?: boolean;
+  dilemmas: Record<number, number>;
+  nights: Record<number, string>; // night -> the day it was answered
+  mirror?: number;
+  settled?: number;
+  updated: number;
 }
 
 export const uid = () =>
@@ -288,6 +301,10 @@ export function merge(a: Save, b: Save): Save {
   if (!a.profile || (b.profile && b.profile.updated > a.profile.updated)) out.profile = b.profile;
   if (b.settings.updated > a.settings.updated) out.settings = b.settings;
   out.done = { ...b.done, ...a.done };
+  if (!a.quiz || (b.quiz && b.quiz.updated > a.quiz.updated)) out.quiz = b.quiz;
+  const cairn = new Map<number, { text: string; written: number; opens: number }>();
+  for (const c of [...(a.cairn ?? []), ...(b.cairn ?? [])]) cairn.set(c.written, c);
+  if (cairn.size) out.cairn = [...cairn.values()];
   out.created = Math.min(a.created, b.created);
   return out;
 }
