@@ -1,229 +1,17 @@
-// The walkable Hollow: a larger inked village you walk around, plus building interiors.
-import { bonfire, buildingArt, guiser, INK, RED, type GuiserOpts } from "./art";
-import { ACTIONS, BUILDINGS, type BuildingId, type Ember } from "./content";
+// Building interiors: an inked room per building, one spot per room.
+import { guiser, INK, RED, type GuiserOpts } from "./art";
+import { ACTIONS, type BuildingId } from "./content";
 
-export const W = 1000, H = 1400;
-export const FIRE: [number, number] = [500, 795];
-export const SPOTS: Record<BuildingId, [number, number]> = {
-  "bothy": [500, 1130],
-  "stone-field": [200, 960],
-  "ogham-tower": [805, 920],
-  "forge": [220, 660],
-  "craft-hall": [790, 640],
-  "bards-lane": [500, 450],
-  "wildwood": [190, 395],
-  "feasting-halls": [815, 360],
-  "market-square": [495, 225],
-  "healing-well": [160, 1265],
-  "raven-post": [850, 1250],
-  "old-roads": [500, 1350],
-};
-const SCALE = 1.7;
-const door = (id: BuildingId): [number, number] => [SPOTS[id][0], SPOTS[id][1] + 30];
-const body = (id: BuildingId) => ({ x: SPOTS[id][0], y: SPOTS[id][1] - 42, r: 64 });
-
-// A seeded random, so the scenery is the same every visit.
-function rng(seed: number) {
-  return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-}
-
-function scenery(): string {
-  const r = rng(11);
-  const out: string[] = [];
-  const clear = (x: number, y: number) =>
-    Object.values(SPOTS).every(([bx, by]) => Math.hypot(bx - x, by - 40 - y) > 130) && Math.hypot(FIRE[0] - x, FIRE[1] - y) > 150;
-  let n = 0;
-  while (out.length < 90 && n++ < 3000) {
-    const x = 20 + r() * (W - 40), y = 40 + r() * (H - 60);
-    if (!clear(x, y)) continue;
-    const edge = Math.min(x, W - x, y, H - y);
-    const k = r();
-    if (edge < 160 || k < 0.35) {
-      const s = 0.8 + r() * 0.7, g = ["#7f9a7a", "#6b8a6a", "#8fa585"][Math.floor(r() * 3)];
-      out.push(`<g transform="translate(${x.toFixed(0)} ${y.toFixed(0)}) scale(${s.toFixed(2)})"><path d="M0 0v-14" stroke="${INK}" stroke-width="2.4"/><path d="M0 -12q-18 -2 -14 -18q-6 -16 14 -20q20 4 14 20q4 16 -14 18z" fill="${g}" stroke="${INK}" stroke-width="2"/></g>`);
-    } else if (k < 0.75) {
-      out.push(`<path d="M${x.toFixed(0)} ${y.toFixed(0)}l-4 -9M${x.toFixed(0)} ${y.toFixed(0)}l1 -11M${x.toFixed(0)} ${y.toFixed(0)}l6 -8" stroke="#8a8f78" stroke-width="1.6" stroke-linecap="round"/>`);
-    } else {
-      out.push(`<ellipse cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" rx="${(7 + r() * 8).toFixed(0)}" ry="${(5 + r() * 4).toFixed(0)}" fill="#b5afa6" stroke="${INK}" stroke-width="1.6"/>`);
-    }
-  }
-  return out.join("");
-}
-const SCENERY = scenery();
-
-function paths(): string {
-  const d = BUILDINGS.map((b) => {
-    const [x, y] = door(b.id);
-    const mx = (FIRE[0] + x) / 2, my = (FIRE[1] + y) / 2, dx = x - FIRE[0], dy = y - FIRE[1];
-    return `M${FIRE[0]} ${FIRE[1] + 20}Q${(mx + dy * 0.12).toFixed(0)} ${(my - dx * 0.12).toFixed(0)} ${x} ${y}`;
-  }).join("");
-  return `<path d="${d}" fill="none" stroke="#cdc6bb" stroke-width="30" stroke-linecap="round"/><path d="${d}" fill="none" stroke="#d9d3c9" stroke-width="22" stroke-linecap="round"/>`;
-}
-
-export interface WorldState {
-  open: (id: BuildingId) => boolean;
-  level: (id: BuildingId) => number;
-  ember: Record<Ember, number>;
-  lvl: number;
-  look: GuiserOpts;
-  firstTime: boolean;
-}
-
-export function worldSVG(ws: WorldState): string {
-  const plots = BUILDINGS.map((b) => {
-    const [x, y] = SPOTS[b.id];
-    const name = b.name.replace(/^The /, "");
-    if (ws.open(b.id)) {
-      return `<g class="plot open" data-plot="${b.id}" transform="translate(${x} ${y})">
-        <ellipse cx="0" cy="4" rx="${44 * SCALE}" ry="11" fill="${INK}" opacity=".1"/>
-        <g transform="scale(${SCALE})" filter="url(#wob)">${buildingArt(b.id)}</g>
-        <rect x="-11" y="20" width="22" height="9" rx="3" fill="#b59a63" stroke="${INK}" stroke-width="1.6"/>
-        <text y="52" text-anchor="middle" class="plot-name">${name}</text></g>`;
-    }
-    return `<g class="plot locked" data-plot="${b.id}" transform="translate(${x} ${y})">
-      <ellipse cx="0" cy="-36" rx="86" ry="66" fill="#e9e5de" opacity=".85" filter="url(#blur2)"/>
-      <path d="M-50 0q50 -18 100 0" stroke="#9a948c" stroke-width="2" stroke-dasharray="4 6" fill="none"/>
-      <text y="-30" text-anchor="middle" class="plot-q">?</text><text y="24" text-anchor="middle" class="plot-lv">opens at level ${ws.level(b.id)}</text></g>`;
-  }).join("");
-  return `<svg id="world" viewBox="0 0 400 600" preserveAspectRatio="xMidYMid slice" role="application" aria-label="Your Hollow. Tap the ground to walk, tap a building to go inside. Arrow keys also work.">
-    <defs><radialGradient id="fog" cx="50%" cy="55%" r="60%"><stop offset="72%" stop-color="#d6d1c9" stop-opacity="0"/><stop offset="100%" stop-color="#bdb7ae" stop-opacity=".97"/></radialGradient></defs>
-    <rect x="-400" y="-400" width="${W + 800}" height="${H + 800}" fill="#bdb7ae"/>
-    <rect width="${W}" height="${H}" fill="#e4dfd5"/>
-    ${paths()}
-    <g class="scenery">${SCENERY}</g>
-    <g transform="translate(${FIRE[0] - 100} ${FIRE[1] - 130})">${bonfire(ws.ember, ws.lvl, { bare: true })}</g>
-    ${plots}
-    <g id="pl"><g class="pl-in"><g class="pl-flip" transform="scale(.56)"><g transform="translate(-60 -140)">${guiser({ ...ws.look, bare: true })}</g></g></g></g>
-    <rect width="${W}" height="${H}" fill="url(#fog)" pointer-events="none"/>
-    <text x="${W / 2}" y="${H - 18}" text-anchor="middle" class="oldroads" pointer-events="none">the Old Roads</text>
-  </svg>`;
-}
-
-// ---------- walking ----------
-export const pl = { x: 560, y: 1190, face: 1 };
-let target: { x: number; y: number } | null = null;
-let pending: BuildingId | null = null;
-let raf = 0, lastT = 0, near: BuildingId | null = null, cam = { x: -1, y: -1 }, stuck = 0;
-const keys = new Set<string>();
-let hooks: { enter: (id: BuildingId) => void; near: (id: BuildingId | null) => void; locked: (id: BuildingId) => void; moved: () => void; isOpen: (id: BuildingId) => boolean } | null = null;
-let keysBound = false;
-
-function blocked(x: number, y: number): boolean {
-  if (x < 20 || y < 40 || x > W - 20 || y > H - 20) return true;
-  for (const b of BUILDINGS) {
-    const c = body(b.id);
-    if (Math.hypot(x - c.x, (y - c.y) * 1.3) < c.r) return true;
-  }
-  return Math.hypot(x - FIRE[0], (y - FIRE[1]) * 1.4) < 52;
-}
-
-function walkTo(x: number, y: number, enter: BuildingId | null) {
-  target = { x, y };
-  pending = enter;
-  stuck = 0;
-}
-
-export function attachWorld(h: NonNullable<typeof hooks>) {
-  hooks = h;
-  cancelAnimationFrame(raf);
-  cam = { x: -1, y: -1 };
-  const svg = document.getElementById("world") as unknown as SVGSVGElement | null;
-  if (!svg) return;
-  svg.addEventListener("pointerdown", (e) => {
-    const plot = (e.target as Element).closest("[data-plot]") as SVGGElement | null;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const p = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-    hooks?.moved();
-    if (plot) {
-      const id = plot.dataset.plot as BuildingId;
-      if (!hooks?.isOpen(id)) { hooks?.locked(id); return; }
-      const [dx, dy] = door(id);
-      walkTo(dx, dy, id);
-      return;
-    }
-    walkTo(p.x, p.y, null);
+// Everything inside is grey ink on paper; red stays for the spot you're standing at.
+export function inkify(svg: string, keep: string[] = [RED]): string {
+  return svg.replace(/#([0-9a-f]{6})\b/gi, (m, h) => {
+    if (keep.some((k) => k.toLowerCase() === m.toLowerCase())) return m;
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    const y = Math.round(0.3 * r + 0.59 * g + 0.11 * b);
+    const v = Math.min(250, Math.round(y * 0.92 + 14));
+    const hx = (n: number) => n.toString(16).padStart(2, "0");
+    return `#${hx(v)}${hx(v - 2)}${hx(v - 5 < 0 ? 0 : v - 5)}`;
   });
-  if (!keysBound) {
-    keysBound = true;
-    addEventListener("keydown", (e) => {
-      if (!document.getElementById("world") || document.querySelector(".sheet")) return;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"].includes(k)) {
-        if ((e.target as HTMLElement).closest("input,textarea")) return;
-        keys.add(k); target = null; pending = null; e.preventDefault(); hooks?.moved();
-      }
-    });
-    addEventListener("keyup", (e) => keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key));
-    addEventListener("blur", () => keys.clear());
-  }
-  lastT = performance.now();
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const frame = (t: number) => {
-    const el = document.getElementById("world") as unknown as SVGSVGElement | null;
-    if (!el) return; // left the map; attachWorld starts the loop again
-    const dt = Math.min(0.05, (t - lastT) / 1000);
-    lastT = t;
-    let vx = 0, vy = 0;
-    if (keys.has("ArrowLeft") || keys.has("a")) vx -= 1;
-    if (keys.has("ArrowRight") || keys.has("d")) vx += 1;
-    if (keys.has("ArrowUp") || keys.has("w")) vy -= 1;
-    if (keys.has("ArrowDown") || keys.has("s")) vy += 1;
-    if (!vx && !vy && target) {
-      const dx = target.x - pl.x, dy = target.y - pl.y, d = Math.hypot(dx, dy);
-      if (d < 6) {
-        target = null;
-        if (pending) { const p = pending; pending = null; hooks?.enter(p); }
-      } else { vx = dx / d; vy = dy / d; }
-    }
-    const moving = !!(vx || vy);
-    if (moving) {
-      const m = Math.hypot(vx, vy), sp = 230 * dt;
-      const nx = pl.x + (vx / m) * sp, ny = pl.y + (vy / m) * sp;
-      const bx = pl.x, by = pl.y;
-      if (!blocked(nx, ny)) { pl.x = nx; pl.y = ny; }
-      else if (!blocked(nx, pl.y)) pl.x = nx;
-      else if (!blocked(pl.x, ny)) pl.y = ny;
-      else {
-        // slide around the obstacle by stepping sideways
-        const sx = pl.x - (vy / m) * sp, sy = pl.y + (vx / m) * sp;
-        if (!blocked(sx, sy)) { pl.x = sx; pl.y = sy; }
-      }
-      if (Math.abs(vx) > 0.2) pl.face = vx > 0 ? 1 : -1;
-      if (Math.hypot(pl.x - bx, pl.y - by) < 0.5) { if ((stuck += dt) > 0.5) { target = null; pending = null; } } else stuck = 0;
-    }
-    // player
-    const p = el.querySelector("#pl") as SVGGElement | null;
-    if (p) {
-      p.setAttribute("transform", `translate(${pl.x.toFixed(1)} ${pl.y.toFixed(1)})`);
-      (p.querySelector(".pl-flip") as SVGGElement).setAttribute("transform", `scale(${0.56 * pl.face} .56)`);
-      p.classList.toggle("walking", moving && !reduce);
-    }
-    // camera follows, gently
-    const cw = el.clientWidth || 390, ch = el.clientHeight || 600;
-    const zoom = Math.max(0.7, Math.min(0.95, cw / 540));
-    const vw = cw / zoom, vh = ch / zoom;
-    const tx = vw >= W ? (W - vw) / 2 : Math.max(0, Math.min(W - vw, pl.x - vw / 2));
-    const ty = vh >= H ? (H - vh) / 2 : Math.max(0, Math.min(H - vh, pl.y - vh * 0.55));
-    if (cam.x < -0.5 || reduce) cam = { x: tx, y: ty };
-    else { cam.x += (tx - cam.x) * Math.min(1, dt * 6); cam.y += (ty - cam.y) * Math.min(1, dt * 6); }
-    el.setAttribute("viewBox", `${cam.x.toFixed(1)} ${cam.y.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
-    // the nearest open door within reach
-    let best: BuildingId | null = null, bd = 80;
-    for (const b of BUILDINGS) {
-      const [dx, dy] = door(b.id), d = Math.hypot(pl.x - dx, pl.y - dy);
-      if (d < bd) { bd = d; best = b.id; }
-    }
-    if (best !== near) { near = best; hooks?.near(best); }
-    raf = requestAnimationFrame(frame);
-  };
-  raf = requestAnimationFrame(frame);
-  hooks.near(near);
-}
-
-export function standAtDoor(id: BuildingId) {
-  const [x, y] = door(id);
-  pl.x = x + 46; pl.y = y + 8; target = null; pending = null;
 }
 
 // ---------- interiors ----------
@@ -289,11 +77,13 @@ export function interiorSVG(id: BuildingId, selected: number, look: GuiserOpts):
     const x = gap * (i + 1), on = i === selected;
     const label = r.replace(/^the /, "");
     return `<g class="prop ${on ? "on" : ""}" role="button" tabindex="0" aria-pressed="${on}" aria-label="${label}" data-act="station" data-arg="${i}" transform="translate(${x.toFixed(0)} 200)">
-      ${on ? `<ellipse cx="0" cy="-20" rx="44" ry="40" fill="#f2b84b" opacity=".35" filter="url(#blur2)"/>` : ""}
+      ${on ? `<ellipse cx="0" cy="2" rx="40" ry="8" fill="none" stroke="${RED}" stroke-width="2.2"/>` : ""}
       <ellipse cx="0" cy="2" rx="34" ry="6" fill="${INK}" opacity=".12"/><g filter="url(#wob)">${prop(propFor(r))}</g>
       <text y="26" text-anchor="middle" class="prop-name">${label[0].toUpperCase() + label.slice(1)}</text></g>`;
   }).join("");
   const gx = gap * (selected + 1) + (selected === n - 1 ? -46 : 40);
-  return `<svg class="interior" viewBox="0 92 ${VW} 168" style="width:max(100%, ${VW * 1.1}px)" role="group" aria-label="Inside">${wall}${props}
+  const hatchDefs = `<defs><pattern id="hatchf" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><path d="M0 0v6" stroke="#8f8a83" stroke-width="1"/></pattern></defs>`;
+  const floor = out ? "" : `<rect y="160" width="${VW}" height="100" fill="url(#hatchf)" opacity=".35"/>`;
+  return `<svg class="interior" viewBox="0 92 ${VW} 168" style="width:max(100%, ${VW * 1.1}px)" role="group" aria-label="Inside">${hatchDefs}${inkify(wall)}${floor}${inkify(props)}
     <g class="pl-room" style="transform:translate(${gx.toFixed(0)}px, 214px)"><g transform="scale(.42) translate(-60 -140)">${guiser({ ...look, bare: true })}</g></g></svg>`;
 }

@@ -1,5 +1,6 @@
 import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
-import { attachWorld, interiorSVG, roomsOf, standAtDoor, worldSVG } from "./world";
+import { attachWorld, standAtDoor, worldSVG } from "./iso";
+import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
   type Action, type BuildingId, type Ember,
@@ -474,7 +475,7 @@ function levelSheet(level: number) {
 function foundSheet(id: BuildingId) {
   const o = st.d.openings.find((x) => x.building === id)!, b = BUILDINGS.find((x) => x.id === id)!;
   const l = st.s.logs.find((x) => x.id === o.logId);
-  return sheetWrap(`You found ${b.name}`, `<div class="gate"><svg viewBox="-60 -110 120 130" class="found-art" role="img" aria-label="${esc(b.name)}"><g filter="url(#wob)">${buildingArt(id)}</g></svg>
+  return sheetWrap(`You found ${b.name}`, `<div class="gate"><svg viewBox="-60 -110 120 130" class="found-art" role="img" aria-label="${esc(b.name)}"><g filter="url(#wob)">${inkify(buildingArt(id))}</g></svg>
     <p class="dated">Inked on your map on ${fmtDate(o.ts!)}${l ? `, the day you logged “${esc(ACTION_BY_ID[l.action]?.name.toLowerCase() ?? "")}”` : ""}.</p><p>${esc(b.blurb)}</p>
     <button class="primary wide" data-act="next">Walk there later</button></div>`, { close: false });
 }

@@ -74,7 +74,7 @@ export function bonfire(ember: Record<Ember, number>, level: number, opts: { bar
     const x1 = cx + Math.cos(rad) * 10, y1 = cy + 14 + Math.sin(rad) * 6;
     const x2 = cx + Math.cos(rad) * 66, y2 = cy + 14 + Math.sin(rad) * 44;
     const v = ember[e.key] ?? 1, heat = v / 10;
-    const col = `hsl(${30 - heat * 18} ${40 + heat * 50}% ${30 + heat * 32}%)`;
+    const col = `hsl(0 0% ${80 - heat * 50}%)`;
     const lx = cx + Math.cos(rad) * 84, ly = cy + 18 + Math.sin(rad) * 58;
     const lab = opts.labels ? `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" class="emb-l">${e.name.slice(0, 3)}<tspan class="emb-n" dx="3">${v}</tspan></text>` : "";
     return `<g><path d="M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${INK}" stroke-width="11" stroke-linecap="round"/><path d="M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="${col}" stroke-width="7" stroke-linecap="round"/><title>${e.name} ${v}</title></g>${lab}`;
@@ -83,8 +83,8 @@ export function bonfire(ember: Record<Ember, number>, level: number, opts: { bar
     const h = 72 * k * size, w = 28 * k * size, b = cy + 18;
     return `<path d="M${cx} ${b - h}C${cx + w} ${b - h * 0.45} ${cx + w * 1.1} ${b - 8} ${cx} ${b}C${cx - w * 1.1} ${b - 8} ${cx - w} ${b - h * 0.45} ${cx} ${b - h}Z" fill="${c}"/>`;
   };
-  const flame = `<g class="flame">${f(1, "#e8794a")}${f(0.7, "#f2b84b")}${f(0.4, "#fbf1c8")}</g>`;
-  const glow = `<ellipse cx="${cx}" cy="${cy + 6}" rx="${62 * size}" ry="${50 * size}" fill="#f2b84b" opacity=".28" filter="url(#blur)"/>`;
+  const flame = `<g class="flame">${f(1, RED)}${f(0.7, "#ec9a8f")}${f(0.4, "#fbf1e8")}</g>`;
+  const glow = `<ellipse cx="${cx}" cy="${cy + 6}" rx="${62 * size}" ry="${50 * size}" fill="${RED}" opacity=".14" filter="url(#blur)"/>`;
   const inner = `${glow}<g filter="url(#wob)">${logs}${flame}</g>`;
   if (opts.bare) return inner;
   return `<svg viewBox="0 ${opts.labels ? 10 : 20} 200 ${opts.labels ? 210 : 180}" role="img" aria-label="Your bonfire of seven embers">${inner}</svg>`;
