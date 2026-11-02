@@ -222,3 +222,8 @@ h3 { font-size: 20px; margin-bottom: 6px; }
 .scenehint { margin: 0; font-size: 15px; }
 .station h3 { margin-bottom: 4px; }
 .view.hollow > section { width: 100%; }
+
+/* Inputs never inherit the host's dark text colour: ink on paper, always. */
+html { color-scheme: light; }
+input, textarea, select { color: var(--ink); -webkit-text-fill-color: var(--ink); caret-color: var(--ink); color-scheme: light; }
+input::placeholder, textarea::placeholder { color: #8a8580; -webkit-text-fill-color: #8a8580; opacity: 1; }
