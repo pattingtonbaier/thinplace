@@ -9,6 +9,17 @@ export const EMBER_STEP = 300; // XP tagged to an ember per point
 export const START_POINTS = 14;
 export const START_CAP = 6;
 export const EMBER_CAP = 10;
+// Rhythms: something you do on 5 of the last 7 days is part of your life, not growth.
+// It earns a quarter, once a day, and a full log's worth for each whole week kept.
+export const RHYTHM_DAYS = 5;
+export const RHYTHM_SHARE = 0.25;
+// What your usual fortnight already holds starts as a rhythm for the first week.
+export function rhythmSeeds(s: Save): string[] {
+  const a = s.quiz?.anchors ?? {};
+  const out: string[] = [];
+  if (a.meal === 0) out.push("cook", "family-meal");
+  return out;
+}
 
 export interface Look {
   hood: string;
@@ -50,6 +61,8 @@ export interface JournalEntry {
   prompt?: { id: string; answer: string };
   text?: string;
   blocker?: string;
+  paper?: { book: number; page: number }; // written in a paper notebook: where to find it
+  pressed?: boolean; // a photo of the page is kept on this device
   updated: number;
   previous?: { text?: string; updated: number }; // the older version, kept when a merge picks the newer
 }
@@ -62,10 +75,23 @@ export interface Save {
   habits: Habit[];
   logs: Log[];
   journal: Record<string, JournalEntry>;
-  settings: { cutoffHour: number; nudges: boolean; updated: number };
+  settings: { cutoffHour: number; nudges: boolean; paper?: boolean; press?: boolean; updated: number };
   done: Record<string, number>; // first-week tasks and other one-off moments
   quiz?: Quiz;
   cairn?: { text: string; written: number; opens: number }[];
+  books?: Notebook[]; // paper notebooks, numbered
+  gleanings?: Gleaning[]; // lines copied from the month's pages
+  familiars?: Familiar[];
+}
+
+export interface Notebook { n: number; started: number; finished?: number }
+export interface Gleaning { id: string; moon: string; written: number; lines: string[] }
+export interface Familiar { id: string; kind: "cat" | "hound" | "hare" | "hen"; name: string; since: number }
+
+// The new moons, for the monthly gleaning. A mean synodic month from a known new moon is close enough.
+const NEW_MOON_0 = Date.UTC(2000, 0, 6, 18, 14), SYNODIC = 29.530588853 * 864e5;
+export function lastNewMoon(ts: number): number {
+  return NEW_MOON_0 + Math.floor((ts - NEW_MOON_0) / SYNODIC) * SYNODIC;
 }
 
 export interface Quiz {
@@ -137,6 +163,8 @@ export interface Award {
   xp: number;
   byEmber: Partial<Record<Ember, number>>;
   capped: boolean;
+  rhythm?: boolean; // logged as part of a rhythm
+  week?: boolean; // a whole week of the rhythm kept, bundled in
 }
 
 export function awardFor(log: Log, countToday: number): Award {
@@ -178,6 +206,7 @@ export interface Derived {
   levelUps: LevelUp[];
   openings: Opening[];
   rooms: Record<string, Record<string, number>>; // building -> room -> when it opened (the first log there)
+  rhythms: string[]; // actions that are rhythms today
   byDay: Record<string, Log[]>;
   pointsLeft: number;
 }
@@ -213,13 +242,32 @@ export function derive(s: Save): Derived {
   let total = 0;
   let level = 1;
   const rooms: Record<string, Record<string, number>> = { bothy: { "the hearth desk": s.created } };
+  const days: Record<string, Set<string>> = {}; // action -> the days it was logged
+  const seeds = new Set(rhythmSeeds(s)), seedUntil = s.created + 7 * 864e5;
   for (const l of liveLogs(s)) {
     const act = ACTION_BY_ID[l.action];
     if (act) (rooms[act.building] ??= {})[act.room] ??= l.ts;
     const day = dayKey(l.ts, cutoff);
     (byDay[day] ??= []).push(l);
     const k = day + "|" + l.action;
-    const aw = awardFor(l, counts[k] ?? 0);
+    const seen = (days[l.action] ??= new Set());
+    let prior = 0;
+    for (let n = 1; n <= 7; n++) if (seen.has(addDays(day, -n))) prior++;
+    const rhythm = !!act && (prior >= RHYTHM_DAYS || (seeds.has(l.action) && l.ts < seedUntil));
+    let aw: Award;
+    if (rhythm) {
+      if ((counts[k] ?? 0) > 0) aw = { xp: 0, byEmber: {}, capped: true, rhythm: true };
+      else {
+        const base = awardFor(l, 0), byEmber: Partial<Record<Ember, number>> = {};
+        let xp = 0;
+        for (const [e, v] of Object.entries(base.byEmber)) { const q = Math.max(1, Math.round(v! * RHYTHM_SHARE)); byEmber[e as Ember] = q; xp += q; }
+        let run = 1; while (seen.has(addDays(day, -run))) run++;
+        const week = run % 7 === 0;
+        if (week) { byEmber[act.ember] = (byEmber[act.ember] ?? 0) + act.xp; xp += act.xp; }
+        aw = { xp, byEmber, capped: false, rhythm: true, week };
+      }
+    } else aw = awardFor(l, counts[k] ?? 0);
+    seen.add(day);
     counts[k] = (counts[k] ?? 0) + 1;
     awards[l.id] = aw;
     total += aw.xp;
@@ -232,6 +280,11 @@ export function derive(s: Save): Derived {
   }
   const lv = levelFromXP(total);
   const start = startEmbers(s.profile);
+  const todayKey = dayKey(Date.now(), cutoff);
+  const rhythms = Object.entries(days).filter(([a, set]) => {
+    let n = 0; for (let k = 0; k <= 7; k++) if (set.has(addDays(todayKey, -k))) n++;
+    return n >= RHYTHM_DAYS || (seeds.has(a) && Date.now() < seedUntil);
+  }).map(([a]) => a);
   const earned = {} as Record<Ember, number>;
   const ember = {} as Record<Ember, number>;
   for (const e of EMBERS) {
@@ -246,7 +299,7 @@ export function derive(s: Save): Derived {
   return {
     total, level: lv.level, into: lv.into, need: lv.need,
     emberXP, emberEarned: earned, emberStart: start, ember,
-    awards, levelUps, openings, rooms, byDay,
+    awards, levelUps, openings, rooms, byDay, rhythms,
     pointsLeft: START_POINTS - pointsSpent(s.profile),
   };
 }
@@ -306,6 +359,15 @@ export function merge(a: Save, b: Save): Save {
   if (b.settings.updated > a.settings.updated) out.settings = b.settings;
   out.done = { ...b.done, ...a.done };
   if (!a.quiz || (b.quiz && b.quiz.updated > a.quiz.updated)) out.quiz = b.quiz;
+  const books = new Map<number, Notebook>();
+  for (const n of [...(a.books ?? []), ...(b.books ?? [])]) { const p = books.get(n.n); books.set(n.n, p ? { n: n.n, started: Math.min(p.started, n.started), finished: p.finished ?? n.finished } : n); }
+  if (books.size) out.books = [...books.values()].sort((x, y) => x.n - y.n);
+  const gl = new Map<string, Gleaning>();
+  for (const g of [...(a.gleanings ?? []), ...(b.gleanings ?? [])]) gl.set(g.id, g);
+  if (gl.size) out.gleanings = [...gl.values()].sort((x, y) => x.written - y.written);
+  const fam = new Map<string, Familiar>();
+  for (const f of [...(a.familiars ?? []), ...(b.familiars ?? [])]) fam.set(f.id, f);
+  if (fam.size) out.familiars = [...fam.values()].sort((x, y) => x.since - y.since);
   const cairn = new Map<number, { text: string; written: number; opens: number }>();
   for (const c of [...(a.cairn ?? []), ...(b.cairn ?? [])]) cairn.set(c.written, c);
   if (cairn.size) out.cairn = [...cairn.values()];

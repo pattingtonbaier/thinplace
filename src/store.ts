@@ -1,13 +1,17 @@
 // The whole Hollow is one versioned save, kept in the browser's database on this device.
 import { emptySave, merge, migrate, type Save } from "./engine";
 
-const DB = "thinplace", STORE = "hollow", KEY = "save";
+const DB = "thinplace", STORE = "hollow", KEY = "save", PAGES = "pages";
 
 function open(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
-      const req = indexedDB.open(DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      const req = indexedDB.open(DB, 2);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        if (!db.objectStoreNames.contains(PAGES)) db.createObjectStore(PAGES); // pressed pages live apart, so the save stays small
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
     } catch {
@@ -73,4 +77,29 @@ export async function importBackup(file: File, current: Save): Promise<Save> {
   const raw = JSON.parse(await file.text());
   const incoming = migrate(raw.save ?? raw);
   return merge(current, incoming);
+}
+
+// Pressed pages: a photo of a paper journal page, kept on this device under its day.
+const pageMemory = new Map<string, string>();
+export async function putPage(day: string, dataUrl: string): Promise<void> {
+  pageMemory.set(day, dataUrl);
+  const db = await open();
+  if (!db) return;
+  await new Promise<void>((resolve) => { const tx = db.transaction(PAGES, "readwrite"); tx.objectStore(PAGES).put(dataUrl, day); tx.oncomplete = () => resolve(); tx.onerror = () => resolve(); });
+}
+export async function getPage(day: string): Promise<string | null> {
+  const db = await open();
+  if (!db) return pageMemory.get(day) ?? null;
+  return new Promise((resolve) => { const tx = db.transaction(PAGES, "readonly"); const r = tx.objectStore(PAGES).get(day); r.onsuccess = () => resolve(r.result ?? null); r.onerror = () => resolve(null); });
+}
+// Shrink a photo to a page-sized JPEG before keeping it.
+export async function pressPhoto(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const k = Math.min(1, 1100 / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+    cv.getContext("2d")!.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", 0.72);
+  } finally { URL.revokeObjectURL(url); }
 }

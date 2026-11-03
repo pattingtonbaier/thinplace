@@ -91,6 +91,39 @@ describe("rooms", () => {
   });
 });
 
+describe("rhythms", () => {
+  const D = 24 * H;
+  test("after 5 of the last 7 days, an action earns a quarter, once a day", () => {
+    const s = withProfile();
+    s.logs = [0, 1, 2, 3, 4, 5].map((i) => log("c" + i, "cook", T0 + i * D));
+    s.logs.push(log("c5b", "cook", T0 + 5 * D + H));
+    const d = derive(s);
+    expect(d.awards.c4.xp).toBe(20);
+    expect(d.awards.c5.rhythm).toBe(true);
+    expect(d.awards.c5.xp).toBe(5);
+    expect(d.awards.c5b.xp).toBe(0);
+  });
+  test("a whole week kept bundles in one full log", () => {
+    const s = withProfile();
+    s.logs = [0, 1, 2, 3, 4, 5, 6].map((i) => log("c" + i, "cook", T0 + i * D));
+    const d = derive(s);
+    expect(d.awards.c6.week).toBe(true);
+    expect(d.awards.c6.xp).toBe(25);
+  });
+  test("a rhythm lapses when it's let go", () => {
+    const s = withProfile();
+    s.logs = [0, 1, 2, 3, 4, 5, 14].map((i) => log("c" + i, "cook", T0 + i * D));
+    expect(derive(s).awards.c14.rhythm).toBeFalsy();
+    expect(derive(s).awards.c14.xp).toBe(20);
+  });
+  test("cooking for someone this week starts cooking as a rhythm", () => {
+    const s = withProfile();
+    s.quiz = { anchors: { meal: 0 }, dilemmas: {}, nights: {}, updated: T0 };
+    s.logs = [log("c0", "cook", s.created + H)];
+    expect(derive(s).awards.c0.xp).toBe(5);
+  });
+});
+
 describe("merge", () => {
   test("logs from two devices combine without duplicates, and deletions travel", () => {
     const a = withProfile();

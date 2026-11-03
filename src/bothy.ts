@@ -243,6 +243,11 @@ function things(rooms: Rooms, t: number): Thing[] {
     for (const z of [8, 48, 88, 128]) {
       poly([P(x0 + 0.06, y1, z), P(x1 - 0.06, y1, z), P(x1 - 0.06, y1, z + 34), P(x0 + 0.06, y1, z + 34)], "#3a3733", 1.4);
       let x = x0 + 0.1, k = 0;
+      if (z === 128) for (const n of shelf.slice(-6)) { // your finished notebooks, numbered
+        poly([P(x, y1, z), P(x + 0.11, y1, z), P(x + 0.11, y1, z + 30), P(x, y1, z + 30)], "#efe8da", 1.3);
+        const [tx, ty] = P(x + 0.055, y1, z + 16); c.font = `9px ${FELL_SC}`; c.fillStyle = INK; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][n - 1] ?? String(n), tx, ty);
+        x += 0.125;
+      }
       while (x < x1 - 0.14) {
         if ((k + z) % 6 === 4) { const [jx, jy] = P(x + 0.08, y1, z); poly([[jx - 6, jy], [jx + 6, jy], [jx + 6, jy - 20], [jx - 6, jy - 20]], "rgba(225,230,229,.85)", 1.2); poly([[jx - 4, jy - 20], [jx + 4, jy - 20], [jx + 3, jy - 25], [jx - 3, jy - 25]], "#b8a98f", 1); x += 0.18; k++; continue; }
         const w = 0.07 + h2(k, z) * 0.05, hh = 22 + h2(z, k) * 9, tone = ["#e3dfd8", "#9d988f", "#cfcac2", "#6f6b65"][(k + z) % 4];
@@ -329,8 +334,9 @@ export function placeAt(id: string) { const s = STATIONS.find((x) => x.id === id
 export type BothyHooks = { arrive: (id: string) => void; near: (id: string | null) => void; tapStation: (id: string) => void };
 let raf = 0;
 let familiar: Familiar = "cat";
-export function attachBothy(cv: HTMLCanvasElement, rooms: Rooms, look: GuiserOpts, hooks: BothyHooks, labels: boolean, kind: Familiar = "cat") {
-  familiar = kind;
+let shelf: number[] = [];
+export function attachBothy(cv: HTMLCanvasElement, rooms: Rooms, look: GuiserOpts, hooks: BothyHooks, labels: boolean, kind: Familiar = "cat", books: number[] = []) {
+  familiar = kind; shelf = books;
   cancelAnimationFrame(raf);
   const DPR = Math.min(2, devicePixelRatio || 1);
   const ctx = cv.getContext("2d")!;

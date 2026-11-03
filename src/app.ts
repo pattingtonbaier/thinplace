@@ -8,17 +8,17 @@ import {
   type Action, type BuildingId, type Ember,
 } from "./content";
 import {
-  addDays, dayKey, derive, EMBER_STEP, habitTicks, isOpen, levelFromXP, pointsSpent, searchActions, START_CAP, START_POINTS,
+  addDays, dayKey, derive, lastNewMoon, EMBER_STEP, habitTicks, isOpen, levelFromXP, pointsSpent, searchActions, START_CAP, START_POINTS,
   startEmbers, uid, weekStart, type Derived, type Habit, type Log, type Profile, type Save,
 } from "./engine";
-import { exportBackup, importBackup, load, persist, save } from "./store";
+import { exportBackup, getPage, importBackup, load, persist, pressPhoto, putPage, save } from "./store";
 import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForDay, PROMPTS, suggestCalling, suggestPoints } from "./quiz";
 
 // ---------- state ----------
 type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
-  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes"
+  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar"
   | { found: BuildingId } | { level: number };
 
 const st = {
@@ -36,13 +36,14 @@ const st = {
   inside: null as BuildingId | null,
   station: 0,
   near: null as BuildingId | null,
-  journalDraft: { feel: undefined as number | undefined, text: "", blocker: "", ptext: "" },
+  journalDraft: { feel: undefined as number | undefined, text: "", blocker: "", ptext: "", book: 0, page: 0, pressed: false },
   reveal: 0, // the night whose tale was just revealed
   cairnDraft: "",
   installEvt: null as any,
   bothy: "room" as "room" | "table",
   stationAt: null as string | null, // the part of the Bothy you're standing at
   names: false, // show the names of things on the table
+  famDraft: { kind: "cat" as "cat" | "hound" | "hare" | "hen", name: "" },
   motion: { grind: 0, boil: 0, notch: 0 }, // when each ritual started
 };
 
@@ -97,11 +98,16 @@ async function logAction(actionId: string, extra: Partial<Log> = {}) {
   await commit();
   const aw = st.d.awards[l.id];
   st.note = "";
-  if (aw.capped) toast(`${a.name}: into the day-book. That's three today, so this one is for the record.`);
-  else {
-    const parts = Object.entries(aw.byEmber).map(([e, v]) => `+${v} ${emberName(e as Ember)}`);
-    toast(`${a.name}: ground in · ${parts.join(" · ")}`);
-  }
+  const prev = st.s.logs.filter((x) => !x.deleted && x.action === l.action && x.id !== l.id).pop();
+  const newRhythm = aw.rhythm && (!prev || !st.d.awards[prev.id]?.rhythm);
+  const parts = Object.entries(aw.byEmber).map(([e, v]) => `+${v} ${emberName(e as Ember)}`).join(" · ");
+  if (aw.rhythm && aw.capped) toast(`${a.name} is already notched today. It's a rhythm, so once a day is enough.`);
+  else if (aw.capped) toast(`${a.name}: into the day-book. That's three today, so this one is for the record.`);
+  else if (newRhythm) toast(`${a.name} is a rhythm now: part of your life, not something to prove. It earns a little each day; going further earns in full. ${parts}`);
+  else if (aw.week) toast(`${a.name}: a whole week kept. The notches bundle in · ${parts}`);
+  else if (aw.rhythm) toast(`${a.name}: notched, a rhythm · ${parts}`);
+  else toast(`${a.name}: ground in · ${parts}`);
+  if (a.room === "the familiars' pen" && !(st.s.familiars ?? []).length) { st.famDraft = { kind: "cat", name: "" }; st.queue.unshift("familiar"); if (st.sheet === "log") st.sheet = null; }
   if (atTable()) { st.motion.grind = performance.now(); if (st.sheet === "log") st.sheet = null; if (st.queue.some((q) => q && typeof q === "object" && "level" in q)) st.motion.boil = performance.now(); }
   if (st.queue.length && (st.sheet === null || st.sheet === "log")) nextSheet();
   render();
@@ -180,7 +186,9 @@ function stationCard(id: string | null): string {
   if (s.id === "desk") return `<h3>The hearth desk</h3><p class="quiet">Your day-book and quill, the ember flask and the map of the Hollow are on the table.</p><button class="primary wide" data-act="sit">Sit at the table</button>`;
   const made = st.d.rooms.bothy?.[s.room] !== undefined;
   const acts = ACTIONS.filter((a) => a.building === "bothy" && a.room === s.room);
-  return `<h3>${esc(s.name[0].toUpperCase() + s.name.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.map(actionRow).join("")}</ul>${s.id === "oak" ? `<button class="ghost wide" data-act="leave-bothy">Leave the Bothy</button>` : ""}`;
+  const fams = st.s.familiars ?? [];
+  const famLine = s.id === "pen" && fams.length ? `<p class="quiet">${fams.map((f) => `${esc(f.name)} the ${f.kind}`).join(", ")}.</p>${fams.length < 3 ? `<button class="link" data-act="fam-add">Another familiar</button>` : ""}` : "";
+  return `<h3>${esc(s.name[0].toUpperCase() + s.name.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}${famLine}<ul class="actions">${acts.map(actionRow).join("")}</ul>${s.id === "oak" ? `<button class="ghost wide" data-act="leave-bothy">Leave the Bothy</button>` : ""}`;
 }
 function bothyView() {
   if (st.bothy === "table") return tableView();
@@ -198,13 +206,13 @@ function tableView() {
     <details class="plain"><summary>What's on the table</summary><ul class="blist">${SPOTS.filter((x) => x.id !== "notes" || hasNotes()).map((x) => `<li><button class="brow" data-act="spot" data-arg="${x.id}"><b>${esc(x.label.split(":")[0])}</b><span>${esc(x.label.split(":")[1]?.trim() ?? "")}</span></button></li>`).join("")}</ul></details>
   </section>`;
 }
-function hasNotes() { return tasks() !== "" || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
+function hasNotes() { return tasks() !== "" || gleaningDue() || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
 function tableData(): TableData {
   const t = today(), now = new Date();
   const samhain = (now.getMonth() === 9 && now.getDate() === 31) || (now.getMonth() === 10 && now.getDate() === 1);
   const day = (st.d.byDay[t] ?? []).map((l) => ({ name: ACTION_BY_ID[l.action]?.name ?? l.action }));
   const since = Date.now() - 30 * 864e5;
-  const notches = new Set(st.s.logs.filter((l) => !l.deleted && l.habit && l.ts > since).map((l) => l.habit + dayKey(l.ts, st.s.settings.cutoffHour))).size;
+  const notches = new Set(st.s.logs.filter((l) => !l.deleted && (l.habit || st.d.awards[l.id]?.rhythm) && l.ts > since).map((l) => (l.habit ?? l.action) + dayKey(l.ts, st.s.settings.cutoffHour))).size;
   const moons = Array.from({ length: 28 }, (_, k) => { const dk = addDays(t, k - 27); return (st.d.byDay[dk]?.length ?? 0) > 0 || !!st.s.journal[dk]; });
   const last = (st.d.byDay[t] ?? []).slice(-1)[0];
   const hot = last ? EMBERS.findIndex((e) => e.key === ACTION_BY_ID[last.action]?.ember) : -1;
@@ -214,7 +222,7 @@ function tableData(): TableData {
   const cut = st.s.settings.cutoffHour, end = new Date(now); end.setHours(cut, 0, 0, 0); if (end <= now) end.setDate(end.getDate() + 1);
   return {
     dateLabel: (samhain ? "Samhain, " : "") + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
-    day, journal: st.s.journal[t]?.text || null, notches, moons,
+    day, journal: st.s.journal[t]?.paper ? `Written in ${pageRef(st.s.journal[t].paper!)}.${st.s.journal[t].text ? ` “${st.s.journal[t].text}”` : ""}` : st.s.journal[t]?.text || null, notches, moons,
     found: BUILDINGS.filter((b) => isOpen(st.d, b.id)).map((b) => b.id),
     stones: EMBERS.map((e) => st.d.ember[e.key]), hot, flask: st.d.into / st.d.need, jars,
     sealed: (st.s.cairn ?? []).some((c) => Date.now() < c.opens), prompt,
@@ -255,7 +263,7 @@ function attachTable() {
 function useSpot(id: string) {
   const open: Record<string, Sheet> = { day: "day", tally: "tally", embers: "embers", stones: "embers", moons: "moons", relics: "relics", bag: "pack", cairn: "cairn", book: "book", notes: "notes", bowl: "look", key: "settings" };
   if (id === "log") { st.q = ""; st.withSomeone = false; st.sheet = "log"; }
-  else if (id === "journal" || id === "quill" || id === "prompt") { st.journalDraft = { feel: undefined, text: "", blocker: "", ptext: "" }; st.reveal = 0; st.sheet = "journal"; }
+  else if (id === "journal" || id === "quill" || id === "prompt") { openJournal(); }
   else if (id === "map") { st.view = "hollow"; standAtDoor("bothy"); }
   else if (id === "candle") { const d = tableData(); toast(`The candle burns until ${st.s.settings.cutoffHour} am, when the day turns over. About ${Math.max(1, Math.round(d.candle * 24))} hours left in it.`); return; }
   else if (open[id]) st.sheet = open[id];
@@ -270,7 +278,7 @@ function attachRoom() {
     arrive: (id) => { st.stationAt = id; card(); },
     near: (id) => { if (id && id !== st.stationAt) { st.stationAt = id; card(); } },
     tapStation: (id) => { if (id === "desk") sit(); },
-  }, (st.s.done.roomVisits ?? 0) < 4);
+  }, (st.s.done.roomVisits ?? 0) < 4, st.s.familiars?.[0]?.kind ?? "cat", (st.s.books ?? []).filter((b) => b.finished).map((b) => b.n));
 }
 function sit() {
   st.bothy = "table"; st.s.done.tableVisits = (st.s.done.tableVisits ?? 0) + 1; save(st.s); render();
@@ -336,7 +344,11 @@ function daySheet() {
 }
 function tallySheet() {
   const habits = st.s.habits.filter((h) => !h.archived);
-  return sheetWrap("The tally stick", `<p class="blurb">Cut a notch for each day you keep a habit. A notch counts as a log, so it earns like anything else.</p>
+  const t = today(), notchedToday = new Set((st.d.byDay[t] ?? []).map((l) => l.action));
+  const rhythms = st.d.rhythms.map((id) => ACTION_BY_ID[id]).filter(Boolean);
+  const rhythmList = rhythms.length ? `<p class="label">Your rhythms</p><p class="quiet">Things you do most days. They're part of your life, so they earn a little each day, and a full log's worth for each whole week kept.</p>
+    <ul class="habits">${rhythms.map((a) => `<li class="habit"><button class="tick ${notchedToday.has(a.id) ? "done" : ""}" data-act="${notchedToday.has(a.id) ? "noop" : "log"}" data-arg="${a.id}" aria-pressed="${notchedToday.has(a.id)}" aria-label="${esc(a.name)}${notchedToday.has(a.id) ? ", notched today" : ""}">${notchedToday.has(a.id) ? "✓" : ""}</button><div class="hname"><b>${esc(a.name)}</b><span>${esc(a.room)}</span></div></li>`).join("")}</ul>` : "";
+  return sheetWrap("The tally stick", `${rhythmList}<p class="label">Habits</p><p class="blurb">Cut a notch for each day you keep a habit. A notch counts as a log, so it earns like anything else.</p>
     ${habits.length ? `<ul class="habits">${habits.map(habitRow).join("")}</ul>` : `<p class="quiet">No habits chosen yet.</p>`}
     <button class="ghost wide" data-act="task" data-arg="habits">${habits.length ? "Change your habits" : "Choose up to three"}</button>`);
 }
@@ -358,7 +370,7 @@ function moonsSheet() {
   const year = st.s.journal[addDays(t, -365)];
   return sheetWrap("The moon-strip", `<p class="blurb">A dark moon for each night you came to the desk, over the last four weeks.</p>
     <ol class="moons">${days.map((dk) => { const n = st.d.byDay[dk]?.length ?? 0, j = st.s.journal[dk]; return `<li class="${n || j ? "kept" : ""} ${dk === t ? "now" : ""}" title="${dk}"><i aria-hidden="true"></i><span>${Number(dk.slice(8))}</span><span class="sr">${n} logs${j ? ", journal written" : ""}</span></li>`; }).join("")}</ol>
-    ${year ? `<section class="card"><h3>On this night, a year ago</h3><p>${esc(year.text ?? "")}</p></section>` : ""}`);
+    ${year ? `<section class="card"><h3>On this night, a year ago</h3>${year.text ? `<p>“${esc(year.text)}”</p>` : ""}${year.paper ? `<p class="quiet">Written in ${pageRef(year.paper)}. Go to the shelf and read the page.</p>` : ""}${year.pressed ? `<img class="pressed" data-page="${addDays(t, -365)}" alt="The page you pressed a year ago"/>` : ""}</section>` : ""}`);
 }
 function relicsSheet() {
   const p = st.s.profile!, c = CALLING_BY_ID[p.calling];
@@ -383,10 +395,13 @@ function bookSheet() {
     const l = st.s.logs.find((x) => x.id === o.logId);
     return `<li><b>${esc(bName(o.building))}</b>, found ${fmtDate(o.ts!)}${l ? `, the day you logged “${esc(ACTION_BY_ID[l.action]?.name.toLowerCase() ?? "")}”` : ""}.</li>`;
   }).join("");
-  return sheetWrap("The Field Book", `<p class="blurb">Every place you find is written in here, dated to the day you found it.</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}`);
+  const gl = (st.s.gleanings ?? []).slice().reverse().map((g) => `<section class="card glean"><h3>${new Date(g.written).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3>${g.lines.map((x) => `<p>“${esc(x)}”</p>`).join("")}</section>`).join("");
+  const books = (st.s.books ?? []).map((b) => `<li><b>Book ${roman(b.n)}</b>, begun ${fmtDate(b.started)}${b.finished ? `, finished ${fmtDate(b.finished)}` : ", in use"}.</li>`).join("");
+  return sheetWrap("The Field Book", `<p class="label">Places you've found</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}
+    ${st.s.settings.paper ? `<p class="label">Gleanings from your notebooks</p>${gl || `<p class="quiet">At each new moon, the table asks you to copy a few lines from the month's pages in here.</p>`}<button class="ghost wide" data-act="glean">Glean now</button>${books ? `<p class="label">Your notebooks</p><ul class="found">${books}</ul>` : ""}` : ""}`);
 }
 function notesSheet() {
-  return sheetWrap("A slip of reminders", `${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
+  return sheetWrap("A slip of reminders", `${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
 }
 
 // ---------- sheets ----------
@@ -396,7 +411,8 @@ function sheetWrap(title: string, body: string, opts: { cls?: string; close?: bo
 }
 
 function actionRow(a: Action) {
-  return `<li><button class="arow" data-act="log" data-arg="${a.id}"><b>${esc(a.name)}</b><span>${esc(a.room)} · ${bName(a.building)}</span><em>+${a.xp} ${emberName(a.ember)}${a.type === "experience" ? " · light" : ""}</em></button></li>`;
+  const r = st.d.rhythms.includes(a.id);
+  return `<li><button class="arow" data-act="log" data-arg="${a.id}"><b>${esc(a.name)}</b><span>${esc(a.room)} · ${bName(a.building)}</span><em>${r ? `a rhythm · +${Math.max(1, Math.round(a.xp * 0.25))}` : `+${a.xp}`} ${emberName(a.ember)}${a.type === "experience" ? " · light" : ""}</em></button></li>`;
 }
 
 function recentActions(): Action[] {
@@ -436,20 +452,90 @@ function journalSheet() {
   const feel = dr.feel ?? j?.feel;
   const asked = questionCard();
   const fp = !asked ? folklorePrompt() : null;
+  const paper = !!st.s.settings.paper;
   return sheetWrap("By the candle", `
     ${asked}
     ${catchup ? `<p class="label">Anything you might have missed today?</p><div class="chips wrap">${catchup}</div>` : ""}
     <p class="label">How do you feel?</p><div class="chips wrap" role="radiogroup">${FEELINGS.map((f, i) => `<button class="chip ${feel === i ? "on" : ""}" role="radio" aria-checked="${feel === i}" data-act="feel" data-arg="${i}">${f}</button>`).join("")}</div>
-    <label class="field"><span class="label">What did today hold?</span><textarea rows="4" data-input="jtext" placeholder="A line is enough.">${esc(dr.text || j?.text || "")}</textarea></label>
+    ${paper ? paperBlock() : `<label class="field"><span class="label">What did today hold?</span><textarea rows="4" data-input="jtext" placeholder="A line is enough.">${esc(dr.text || j?.text || "")}</textarea></label>`}
     <p class="label">What got in the way? <small>(optional, skip any time)</small></p>
     <div class="chips wrap">${BLOCKERS.map((b) => `<button class="chip ${(dr.blocker || j?.blocker) === b.id ? "on" : ""}" data-act="blocker" data-arg="${b.id}">${b.name}</button>`).join("")}</div>
     ${fp ? `<section class="folk"><p class="label">From the old tales <small>(optional)</small></p><p class="tale">${esc(fp.prompt.tale)}</p>
       ${fp.last ? `<p class="quiet">Last time you wrote: “${esc(fp.last)}”. What's changed?</p>` : ""}
-      <label class="field"><span class="label">${esc(fp.prompt.q)}</span><textarea rows="2" data-input="ptext">${esc(dr.ptext || j?.prompt?.answer || "")}</textarea></label></section>` : ""}
-    <button class="primary wide" data-act="save-journal">Close the gate for tonight</button>`);
+      <label class="field"><span class="label">${esc(fp.prompt.q)}</span>${paper ? `<span class="quiet">Answer it in your book. Keep a line of it here if you like.</span>` : ""}<textarea rows="2" data-input="ptext">${esc(dr.ptext || j?.prompt?.answer || "")}</textarea></label></section>` : ""}
+    <button class="primary wide" data-act="save-journal">${paper ? "I wrote tonight · close the gate" : "Close the gate for tonight"}</button>`);
+}
+
+function paperBlock() {
+  const dr = st.journalDraft, j = st.s.journal[today()], pos = paperPos();
+  const maxBook = Math.max(0, ...(st.s.books ?? []).map((b) => b.n));
+  const pressed = dr.pressed || j?.pressed;
+  return `<p class="label">I wrote tonight in</p>
+    <div class="bookpage"><span>Book</span><button class="step" data-act="bk" data-arg="-1" aria-label="Earlier book" ${pos.book <= 1 ? "disabled" : ""}>−</button><b>${roman(pos.book)}</b><button class="step" data-act="bk" data-arg="1" aria-label="Next book">＋</button>
+      <span>page</span><button class="step" data-act="pg" data-arg="-1" aria-label="Earlier page" ${pos.page <= 1 ? "disabled" : ""}>−</button><b>${pos.page}</b><button class="step" data-act="pg" data-arg="1" aria-label="Next page">＋</button></div>
+    ${maxBook && pos.book > maxBook ? `<p class="quiet">A new book. Book ${roman(pos.book)} begins tonight, and Book ${roman(maxBook)} goes to the shelf in the Scriptorium.</p>` : ""}
+    <label class="field"><span class="label">The kept line <small>(optional)</small></span><textarea rows="2" data-input="jtext" placeholder="The one line from tonight's page worth keeping.">${esc(dr.text || j?.text || "")}</textarea></label>
+    ${st.s.settings.press ? `<label class="ghost filebtn wide">${pressed ? "Tonight's page is pressed · press again" : "Press tonight's page"}<input type="file" accept="image/*" capture="environment" data-input="press" hidden/></label>` : ""}`;
 }
 
 const dayNum = (key: string) => Math.round(Date.parse(key + "T12:00:00") / 864e5);
+const roman = (n: number) => { let r = "", x = n; for (const [v, s2] of [[10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]] as [number, string][]) while (x >= v) { r += s2; x -= v; } return r || "I"; };
+const pageRef = (p: { book: number; page: number }) => `Book ${roman(p.book)}, p. ${p.page}`;
+
+// ---------- the paper journal ----------
+function openJournal() {
+  st.journalDraft = { feel: undefined, text: "", blocker: "", ptext: "", book: 0, page: 0, pressed: false };
+  st.reveal = 0;
+  st.sheet = st.s.settings.paper === undefined ? "paperask" : "journal";
+}
+function lastPaper(): { book: number; page: number } | null {
+  const t = today();
+  const keys = Object.keys(st.s.journal).filter((k) => k !== t && st.s.journal[k].paper).sort();
+  return keys.length ? st.s.journal[keys[keys.length - 1]].paper! : null;
+}
+// Where tonight's writing is: the draft, tonight's entry, or the page after last time.
+function paperPos(): { book: number; page: number } {
+  const dr = st.journalDraft, j = st.s.journal[today()], last = lastPaper();
+  const book = dr.book || j?.paper?.book || last?.book || 1;
+  const page = dr.page || j?.paper?.page || (last && last.book === book ? last.page + 1 : 1);
+  return { book, page };
+}
+function paperAskSheet() {
+  return sheetWrap("Before you write", `<p class="blurb">Do you keep a paper journal?</p>
+    <p class="quiet">If you write in a notebook, the game won't ask you to write it all again. You'll tap "I wrote tonight", note the book and page, and keep one line if you like. A year from now, it points you back to the real page.</p>
+    <div class="row2"><button class="primary" data-act="paper" data-arg="yes">Yes, I write on paper</button><button class="ghost" data-act="paper" data-arg="no">No, I'll write here</button></div>
+    <p class="quiet">You can change this any time with the iron key.</p>`);
+}
+// ---------- familiars ----------
+const KINDS: { id: "cat" | "hound" | "hare" | "hen"; name: string; lore: string }[] = [
+  { id: "cat", name: "Cat", lore: "a rush basket by the hearth, like the Cat Sí's" },
+  { id: "hound", name: "Hound", lore: "a straw bed and a water bowl by the door" },
+  { id: "hare", name: "Hare", lore: "a hutch with a hazel latch, for a shape-shifter" },
+  { id: "hen", name: "Hen", lore: "a nesting box and a scatter of grain" },
+];
+function familiarSheet() {
+  const f = st.famDraft, have = st.s.familiars ?? [];
+  return sheetWrap(have.length ? "Another familiar" : "Your familiar", `<p class="blurb">${have.length ? `You keep ${have.map((x) => esc(x.name)).join(" and ")}. Who else shares the Bothy?` : "Who shares the Bothy with you? The pen is made for them."}</p>
+    <p class="label">What kind?</p><div class="chips wrap" role="radiogroup">${KINDS.map((k) => `<button class="chip ${f.kind === k.id ? "on" : ""}" role="radio" aria-checked="${f.kind === k.id}" data-act="fam-kind" data-arg="${k.id}">${k.name}</button>`).join("")}</div>
+    <p class="quiet">The pen: ${KINDS.find((k) => k.id === f.kind)!.lore}.</p>
+    <label class="field"><span class="label">Their name</span><input data-input="famname" maxlength="24" value="${esc(f.name)}" placeholder="What do you call them?"/></label>
+    <button class="primary wide" data-act="fam-save">Welcome them in</button>`);
+}
+
+function gleaningDue(): boolean {
+  if (!st.s.settings.paper) return false;
+  const moon = lastNewMoon(Date.now()), key = dayKey(moon, st.s.settings.cutoffHour);
+  if ((st.s.gleanings ?? []).some((g) => g.moon === key)) return false;
+  const since = moon - 31 * 864e5;
+  return Object.entries(st.s.journal).some(([k, e]) => e.paper && Date.parse(k + "T12:00:00") >= since && Date.parse(k + "T12:00:00") < moon + 864e5);
+}
+function gleanSheet() {
+  const moon = new Date(lastNewMoon(Date.now()));
+  return sheetWrap("The gleaning", `<p class="blurb">The moon is new again. Leaf back through this month's pages and copy two or three lines worth keeping into the Field Book.</p>
+    ${[0, 1, 2].map((i) => `<label class="field"><span class="label">${["The first line", "Another", "One more, if there is one"][i]}</span><textarea rows="2" data-input="glean${i}"></textarea></label>`).join("")}
+    <button class="primary wide" data-act="save-glean">Into the Field Book</button>
+    <p class="quiet">This month's new moon was ${moon.toLocaleDateString(undefined, { day: "numeric", month: "long" })}.</p>`);
+}
 
 function quizState() {
   const q = st.s.quiz;
@@ -567,7 +653,11 @@ function installSheet() {
 
 function settingsSheet() {
   const c = st.s.settings.cutoffHour;
+  const pp = !!st.s.settings.paper, pr = !!st.s.settings.press;
   return sheetWrap("The iron key", `<p class="blurb">The rules of the house.</p>
+    <p class="label">Your journal</p>
+    <div class="chips wrap"><button class="chip ${pp ? "on" : ""}" data-act="set-paper" aria-pressed="${pp}">I keep a paper journal</button>${pp ? `<button class="chip ${pr ? "on" : ""}" data-act="set-press" aria-pressed="${pr}">Press pages (photos, on this device)</button>` : ""}</div>
+    <p class="quiet">${pp ? "Tonight's entry is a tap, a book and page, and one kept line if you like." : "You write your evening entries here, at the table."}</p>
     <p class="label">When does your day end?</p>
     <div class="chips wrap">${[2, 3, 4, 5, 6].map((h) => `<button class="chip ${c === h ? "on" : ""}" data-act="cutoff" data-arg="${h}">${h} am</button>`).join("")}</div>
     <p class="quiet">Logs before this time count toward the day before. Night owls move it later.</p>
@@ -662,6 +752,9 @@ function sheet() {
   if (sh === "cairn") return cairnSheet();
   if (sh === "book") return bookSheet();
   if (sh === "notes") return notesSheet();
+  if (sh === "paperask") return paperAskSheet();
+  if (sh === "familiar") return familiarSheet();
+  if (sh === "glean") return gleanSheet();
   if ("found" in sh) return foundSheet(sh.found);
   if ("level" in sh) return levelSheet(sh.level);
   return "";
@@ -749,6 +842,7 @@ function render() {
   if (document.getElementById("world")) attachWorld(worldHooks);
   if (document.getElementById("room")) attachRoom();
   if (document.getElementById("table")) attachTable();
+  document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
     const sr = scene.getBoundingClientRect(), r = on.getBoundingClientRect();
@@ -774,7 +868,7 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "station-go": { if (arg === "desk") { sit(); return; } placeAt(arg); st.stationAt = arg; break; }
     case "toggle-list": st.list = !st.list; break;
     case "open-log": st.q = ""; st.withSomeone = false; st.sheet = "log"; break;
-    case "open-journal": st.journalDraft = { feel: undefined, text: "", blocker: "", ptext: "" }; st.reveal = 0; st.sheet = "journal"; break;
+    case "open-journal": openJournal(); break;
     case "close": st.sheet = null; nextSheet(); break;
     case "next": nextSheet(); break;
     case "sheet": st.sheet = arg as Sheet; break;
@@ -782,7 +876,28 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "enter": if (st.near) enterBuilding(st.near); return;
     case "leave": if (st.inside) standAtDoor(st.inside); st.inside = null; break;
     case "station": st.station = Number(arg); break;
-    case "log": await logAction(arg); return;
+    case "log": if (st.sheet === "tally") st.motion.notch = performance.now(); await logAction(arg); return;
+    case "noop": return;
+    case "paper": st.s.settings = { ...st.s.settings, paper: arg === "yes", updated: Date.now() }; await commit(); st.sheet = "journal"; break;
+    case "set-paper": st.s.settings = { ...st.s.settings, paper: !st.s.settings.paper, updated: Date.now() }; await commit(); break;
+    case "set-press": st.s.settings = { ...st.s.settings, press: !st.s.settings.press, updated: Date.now() }; await commit(); break;
+    case "bk": { keepJournalDraft(); const p0 = paperPos(); st.journalDraft.book = Math.max(1, p0.book + Number(arg)); st.journalDraft.page = Number(arg) > 0 ? 1 : p0.page; break; }
+    case "pg": { keepJournalDraft(); const p0 = paperPos(); st.journalDraft.book = p0.book; st.journalDraft.page = Math.max(1, p0.page + Number(arg)); break; }
+    case "glean": st.sheet = "glean"; break;
+    case "fam-kind": st.famDraft.name = (document.querySelector("[data-input=famname]") as HTMLInputElement)?.value ?? st.famDraft.name; st.famDraft.kind = arg as any; break;
+    case "fam-add": st.famDraft = { kind: "cat", name: "" }; st.sheet = "familiar"; break;
+    case "fam-save": {
+      const name = ((document.querySelector("[data-input=famname]") as HTMLInputElement)?.value ?? st.famDraft.name).trim();
+      if (!name) { toast("Give them a name first."); return; }
+      (st.s.familiars ??= []).push({ id: uid(), kind: st.famDraft.kind, name, since: Date.now() });
+      await commit(); st.sheet = null; nextSheet(); toast(`${name} has a place in the Bothy now.`); break;
+    }
+    case "save-glean": {
+      const lines = [0, 1, 2].map((i) => ((document.querySelector(`[data-input=glean${i}]`) as HTMLTextAreaElement)?.value ?? "").trim()).filter(Boolean);
+      if (!lines.length) { toast("Copy at least one line, or close this for now."); return; }
+      (st.s.gleanings ??= []).push({ id: uid(), moon: dayKey(lastNewMoon(Date.now()), st.s.settings.cutoffHour), written: Date.now(), lines });
+      await commit(); st.sheet = null; toast(`Gleaned: ${lines.length} line${lines.length > 1 ? "s" : ""} into the Field Book.`); return;
+    }
     case "with": st.withSomeone = !st.withSomeone; break;
     case "del": await deleteLog(arg); return;
     case "tick": {
@@ -835,6 +950,13 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       const fp = folklorePrompt();
       st.s.journal[t] = { feel: dr.feel ?? prev?.feel, text: text.trim(), blocker: dr.blocker || prev?.blocker, updated: Date.now(),
         ...(fp && pt ? { prompt: { id: fp.prompt.id, answer: pt } } : prev?.prompt ? { prompt: prev.prompt } : {}) };
+      if (st.s.settings.paper) {
+        const pos = paperPos(), now = Date.now(), books = (st.s.books ??= []);
+        const maxBook = Math.max(0, ...books.map((b) => b.n));
+        if (pos.book > maxBook) { for (const b of books) b.finished ??= now; books.push({ n: pos.book, started: now }); }
+        st.s.journal[t].paper = pos;
+        if (dr.pressed || prev?.pressed) st.s.journal[t].pressed = true;
+      }
       st.reveal = 0;
       const already = (st.d.byDay[t] ?? []).some((l) => l.action === "journal");
       if (!already) st.s.logs.push({ id: uid(), ts: Date.now(), action: "journal" });
@@ -946,6 +1068,7 @@ function onInput(key: string, el: HTMLInputElement | HTMLTextAreaElement) {
   if (key === "jtext") { st.journalDraft.text = v; return; }
   if (key === "ptext") { st.journalDraft.ptext = v; return; }
   if (key === "cairn") { st.cairnDraft = v; return; }
+  if (key === "famname") { st.famDraft.name = v; return; }
   if (key === "name") { st.intake.name = v; toggleNext(); return; }
   if (key === "pron-own") {
     st.intake.pronouns = v;
@@ -971,6 +1094,16 @@ async function onFile(input: HTMLInputElement) {
   } catch {
     toast("That file isn't a Thinplace backup.");
   }
+}
+
+async function onPress(input: HTMLInputElement) {
+  const f = input.files?.[0];
+  if (!f) return;
+  try {
+    keepJournalDraft();
+    await putPage(today(), await pressPhoto(f));
+    st.journalDraft.pressed = true; render(); toast("Pressed. Tonight's page is kept on this device.");
+  } catch { toast("That photo couldn't be pressed. Try another."); }
 }
 
 export async function start() {
@@ -1008,6 +1141,7 @@ export async function start() {
   document.addEventListener("change", (e) => {
     const el = e.target as HTMLInputElement;
     if (el.dataset.input === "import") onFile(el);
+    if (el.dataset.input === "press") onPress(el);
   });
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); st.installEvt = e; });
 }

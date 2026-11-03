@@ -273,3 +273,9 @@ details.plain summary { cursor: pointer; color: var(--soft); font: 400 16px var(
 #table { max-width: min(100%, calc(100dvh - 230px)); }
 @media (max-width: 480px) { .bothy-room h2, .table-view h2 { font-size: 22px; } }
 #room { max-width: min(100%, calc((100dvh - 300px) * 1.5)); }
+.bookpage { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 400 18px var(--f-caps); }
+.bookpage b { min-width: 34px; text-align: center; font-size: 22px; }
+.bookpage .step { width: 34px; height: 34px; border: 2px solid var(--ink); border-radius: 50%; background: var(--paper2); }
+img.pressed { display: block; max-width: 100%; border: 2px solid var(--ink); margin-top: 8px; transform: rotate(-1deg); }
+.glean p { font-style: italic; margin: 4px 0; }
+.filebtn.wide { display: block; text-align: center; }
