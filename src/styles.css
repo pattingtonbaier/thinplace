@@ -279,3 +279,7 @@ details.plain summary { cursor: pointer; color: var(--soft); font: 400 16px var(
 img.pressed { display: block; max-width: 100%; border: 2px solid var(--ink); margin-top: 8px; transform: rotate(-1deg); }
 .glean p { font-style: italic; margin: 4px 0; }
 .filebtn.wide { display: block; text-align: center; }
+.relic .lore { font-style: italic; color: var(--soft); margin: 2px 0 8px; }
+.relic.deep { background: #ebe5d8; }
+.card.waiting { border-style: dashed; border-color: var(--red); }
+.relics-sheet .card { margin-top: 12px; }

@@ -203,3 +203,62 @@ export const BLOCKERS = [
   { id: "fear-dearg", name: "Routine slipped", monster: "The Fear Dearg" },
   { id: "changeling", name: "Feeling like a fraud", monster: "The Changeling" },
 ];
+
+// ---------- relics: the perks ----------
+// At each ember tier (3, 6 and 9 points earned by logging) you choose one of two relics: steady or deep.
+// No relic ever changes how much XP a log is worth. Effects belong to four families: Shield, Sight, Strike, Ease.
+// "yesterday" relics let some logs be added for the day before; "wisp" shows the next place through the fog.
+// Effects marked waits come alive when monsters and runs arrive.
+export type Family = "Shield" | "Sight" | "Strike" | "Ease";
+export interface Relic {
+  id: string; ember: Ember; tier: 1 | 2 | 3; side: "steady" | "deep";
+  name: string; lore: string; family: Family; effect: string;
+  live?: { yesterday?: { buildings?: BuildingId[]; actions?: string[]; withSomeone?: boolean; days?: number }; wisp?: boolean };
+}
+const R = (id: string, ember: Ember, tier: 1 | 2 | 3, side: "steady" | "deep", name: string, lore: string, family: Family, effect: string, live?: Relic["live"]): Relic => ({ id, ember, tier, side, name, lore, family, effect, live });
+export const RELICS: Relic[] = [
+  R("bracers", "B", 1, "steady", "Leather bracers", "Worn by those who come back to the work.", "Shield", "One missed day a week doesn't break a habit's run."),
+  R("hobnails", "B", 1, "deep", "Hobnail boots", "For the long road and the bad weather on it.", "Strike", "Monsters met on walks and hikes fade twice as fast."),
+  R("hurley", "B", 2, "steady", "Hurley", "Cúchulainn drove a ball with one before he was a man.", "Ease", "Anything at the Stone Field can be added for yesterday.", { yesterday: { buildings: ["stone-field"] } }),
+  R("sweathouse", "B", 2, "deep", "Sweat-house stone", "From the little stone houses where the old people sweated out a sickness.", "Shield", "A rest day after three hard days never counts as a missed one."),
+  R("torc", "B", 3, "steady", "Gold torc", "The neck-ring of the strong, worn for life.", "Shield", "Two missed days a week don't break a run."),
+  R("horn", "B", 3, "deep", "Fionn's hunting horn", "Its call brought the Fianna from every corner of Ireland.", "Strike", "Every Body log hits whatever monster is out, not only its own."),
+  R("hagstone", "O", 1, "steady", "Hag stone", "A stone with a hole worn through. Look through it to see the other world.", "Sight", "See a monster coming the day before it arrives."),
+  R("wisp", "O", 1, "deep", "Wisp lantern", "A light that leads you off the path, toward something worth finding.", "Sight", "The next place in the fog shows its name, and a wisp lights the way.", { wisp: true }),
+  R("quill", "O", 2, "steady", "Quill and inkpot", "Oak-gall ink keeps for a thousand years.", "Ease", "Anything at the Craft Hall can be added for yesterday.", { yesterday: { buildings: ["craft-hall"] } }),
+  R("seerglass", "O", 2, "deep", "Seer's glass", "A bead of rock crystal for reading what's coming.", "Sight", "The Field Book names one pattern a week, unasked."),
+  R("raven", "O", 3, "steady", "Raven familiar", "The Morrígan's bird, who sees the field before the fight.", "Sight", "The raven warns you a day before a rhythm lapses."),
+  R("harefam", "O", 3, "deep", "Hare familiar", "The shape-shifter, never quite where you left it.", "Strike", "A first time anywhere drives off one monster."),
+  R("herbpouch", "N", 1, "steady", "Herb pouch", "Meadowsweet, yarrow and a sprig of rowan.", "Ease", "Well and Cauldron logs can be added for yesterday.", { yesterday: { actions: ["water", "cook", "new-recipe", "family-meal", "sleep"] } }),
+  R("mortar", "N", 1, "deep", "Mortar and pestle", "For remedies, ground slowly.", "Strike", "A gentle day calms every monster for 24 hours."),
+  R("potionbelt", "N", 2, "steady", "Potion belt", "Small bottles for long days.", "Ease", "Once a week, your day can end an hour later."),
+  R("kettle", "N", 2, "deep", "Copper kettle", "Always on, for whoever comes in.", "Shield", "A day you only rested still keeps every habit's run."),
+  R("brigid", "N", 3, "steady", "Brigid's cross", "Woven from rushes on her day and hung for the year.", "Shield", "Once a season, a lost run is restored."),
+  R("hearthstone", "N", 3, "deep", "Hearth stone", "The stone the fire was never let go out on.", "Strike", "Family meals and time with the kids fade any monster by half."),
+  R("ribbon", "F", 1, "steady", "Bard's ribbon", "Tied on by someone who wanted to be remembered.", "Sight", "The Hollow marks a friend you haven't seen in a month."),
+  R("mether", "F", 1, "deep", "Mether", "The four-handled guest cup, passed around the table.", "Strike", "Anything done with someone hits a monster twice."),
+  R("harp", "F", 2, "steady", "Small harp", "The Dagda's harp played the seasons into order.", "Ease", "Anything done with someone can be added for yesterday.", { yesterday: { withSomeone: true } }),
+  R("brooch", "F", 2, "deep", "Cloak brooch", "A gift that fastens one person to another.", "Shield", "A week with a gathering in it keeps all your runs."),
+  R("silverbranch", "F", 3, "steady", "Silver branch", "Its bells play the music of the Otherworld.", "Sight", "You hear when a Fellowship rhythm is about to lapse."),
+  R("claddagh", "F", 3, "deep", "Claddagh ring", "Hands for friendship, a heart for love, a crown for loyalty.", "Strike", "The Gancanagh and the Leannán Sí flee from shared evenings."),
+  R("scrollcase", "I", 1, "steady", "Scroll case", "Leather, worn soft at the clasp.", "Ease", "Notes and thoughts can be added for yesterday.", { yesterday: { actions: ["notes", "thought", "read", "lesson"] } }),
+  R("hazelnut", "I", 1, "deep", "Hazelnut of wisdom", "Nine hazels dropped their nuts into the Well of Segais.", "Sight", "A wisp shows which subject has gone quiet."),
+  R("oghamsticks", "I", 2, "steady", "Ogham sticks", "Twenty letters, each a tree.", "Shield", "One missed lesson a week doesn't break a subject's run."),
+  R("salmonscale", "I", 2, "deep", "Salmon scale", "From the salmon that ate the hazelnuts and knew everything.", "Strike", "Finished books fade the Each-uisce and the Changeling twice as fast."),
+  R("moonstone", "I", 3, "steady", "Moonstone", "Cool in the hand, and brighter as the moon fills.", "Sight", "Your kept lines from a year ago come back on their nights, unasked."),
+  R("cranebag", "I", 3, "deep", "Crane-skin bag", "Manannán's bag, full only at high tide.", "Ease", "Anything you finish can be added up to three days late.", { yesterday: { actions: ["finish-book", "ship", "lesson"], days: 3 } }),
+  R("flask", "R", 1, "steady", "Alchemist's flask", "For the work that runs past midnight.", "Ease", "Tasks done after midnight count for the day before, until dawn."),
+  R("whetstone", "R", 1, "deep", "Whetstone", "A sharp edge does the job in half the strokes.", "Strike", "Tasks under fifteen minutes count as full hits on the Púca."),
+  R("hourglass", "R", 2, "steady", "Hourglass", "Turned once, it gives you the time you need.", "Shield", "A project's run survives one empty week."),
+  R("bellows", "R", 2, "deep", "Forge bellows", "Breath for a fire that's nearly out.", "Strike", "Shipping something drives off any monster at the Forge."),
+  R("hammer", "R", 3, "steady", "Smith's hammer", "Goibniu's hammer never needed a fourth blow.", "Shield", "Once a season, a missed week of work is forgiven."),
+  R("anvil", "R", 3, "deep", "Anvil charm", "A little iron anvil, for luck at the work.", "Sight", "See which project has gone cold before the Púca does."),
+  R("lodestone", "E", 1, "steady", "Lodestone", "It always knows where north is.", "Sight", "Your map marks every place you haven't been in a month."),
+  R("compass", "E", 1, "deep", "Compass rose", "Thirty-two winds, and a way through each.", "Strike", "A first visit anywhere fades every monster a little."),
+  R("waymarker", "E", 2, "steady", "Waymarker stone", "Left on the old roads so the next one finds the way.", "Ease", "Walks, hikes and trips can be added for yesterday.", { yesterday: { actions: ["walk", "hike", "ride", "nature", "somewhere-new"] } }),
+  R("oar", "E", 2, "deep", "Curragh oar", "From the hide boats that went west to find islands.", "Sight", "The Old Roads show one new place to try each week."),
+  R("starmap", "E", 3, "steady", "Star map", "The way home, in any weather.", "Shield", "A trip away keeps every run while you're gone."),
+  R("mistcloak", "E", 3, "deep", "Mist cloak", "Manannán's mist, that hid a whole island.", "Strike", "Monsters lose your trail while you're away from home."),
+];
+export const RELIC_BY_ID: Record<string, Relic> = Object.fromEntries(RELICS.map((r) => [r.id, r]));
+export const relicsAt = (ember: Ember, tier: number) => RELICS.filter((r) => r.ember === ember && r.tier === tier);

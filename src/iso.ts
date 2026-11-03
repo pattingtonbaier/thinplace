@@ -14,6 +14,7 @@ export interface WorldState {
   lvl: number;
   look: GuiserOpts;
   firstTime: boolean;
+  wispNext?: BuildingId | null; // the Wisp lantern shows the next place through the fog
 }
 
 // ---------- the board ----------
@@ -306,7 +307,10 @@ function drawBld(c: C, o: Bld, t: number, ws: WorldState) {
     const L = [[-30, 6, 54, 10, .9], [34, 2, 48, 9, .9], [0, -6, 66, 11, .92], [-22, -18, 50, 10, .88], [26, -22, 44, 9, .86], [2, -34, 40, 8, .8], [-8, 14, 58, 8, .85]];
     L.forEach(([dx, dy, w, h, a], k) => wisp(x + dx + Math.sin(t * 0.25 + k * 1.7) * 7, y - 14 + dy, w, h, a));
     const cp = P(ci + 0.3, cj + 0.3); for (let k = 0; k < 3; k++) ellipse(c, cp[0], cp[1] - 14 - k * 7, 8 - k * 2, 4.5 - k, k % 2 ? "#cfcac2" : "#e3dfd8", 1.6);
-    tag(c, x, y - 74, `LEVEL ${ws.level(id)}`, true);
+    if (ws.wispNext === id) {
+      for (let k = 0; k < 3; k++) { const a = t * 0.9 + k * 2.1, wx = x + Math.cos(a) * 30, wy = y - 40 + Math.sin(a * 1.3) * 12; c.globalAlpha = 0.35; ellipse(c, wx, wy, 9, 9, "#f7f1df"); c.globalAlpha = 1; ellipse(c, wx, wy, 3.2, 3.2, "#fbf3dc", 1); }
+      tag(c, x, y - 74, `${name} · LEVEL ${ws.level(id)}`, true);
+    } else tag(c, x, y - 74, `LEVEL ${ws.level(id)}`, true);
     o.bbox = [x - 70, y - 96, x + 70, y + 20];
     return;
   }

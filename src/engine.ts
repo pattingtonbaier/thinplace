@@ -53,6 +53,7 @@ export interface Log {
   note?: string;
   withSomeone?: boolean;
   habit?: string;
+  late?: number; // added later for an earlier day (a relic allows it); ts is set back to that day
   deleted?: number; // a tombstone, so a deletion survives a merge
 }
 
@@ -82,7 +83,11 @@ export interface Save {
   books?: Notebook[]; // paper notebooks, numbered
   gleanings?: Gleaning[]; // lines copied from the month's pages
   familiars?: Familiar[];
+  relics?: RelicChoice[];
 }
+
+export interface RelicChoice { ember: Ember; tier: number; relic: string; chosen: number; swapped?: number }
+export interface TierUp { ember: Ember; tier: number; ts: number; logId: string }
 
 export interface Notebook { n: number; started: number; finished?: number }
 export interface Gleaning { id: string; moon: string; written: number; lines: string[] }
@@ -207,6 +212,7 @@ export interface Derived {
   openings: Opening[];
   rooms: Record<string, Record<string, number>>; // building -> room -> when it opened (the first log there)
   rhythms: string[]; // actions that are rhythms today
+  tierUps: TierUp[]; // each ember tier reached, dated to the log that reached it
   byDay: Record<string, Log[]>;
   pointsLeft: number;
 }
@@ -237,6 +243,7 @@ export function derive(s: Save): Derived {
   const emberXP = Object.fromEntries(EMBERS.map((e) => [e.key, 0])) as Record<Ember, number>;
   const awards: Record<string, Award> = {};
   const levelUps: LevelUp[] = [];
+  const tierUps: TierUp[] = [];
   const byDay: Record<string, Log[]> = {};
   const counts: Record<string, number> = {};
   let total = 0;
@@ -271,7 +278,12 @@ export function derive(s: Save): Derived {
     counts[k] = (counts[k] ?? 0) + 1;
     awards[l.id] = aw;
     total += aw.xp;
-    for (const [e, v] of Object.entries(aw.byEmber)) emberXP[e as Ember] += v!;
+    for (const [e, v] of Object.entries(aw.byEmber)) {
+      const before = Math.floor(emberXP[e as Ember] / EMBER_STEP);
+      emberXP[e as Ember] += v!;
+      const after = Math.floor(emberXP[e as Ember] / EMBER_STEP);
+      for (const tier of [1, 2, 3]) if (before < tier * 3 && after >= tier * 3) tierUps.push({ ember: e as Ember, tier, ts: l.ts, logId: l.id });
+    }
     const now = levelFromXP(total).level;
     while (level < now) {
       level++;
@@ -299,7 +311,7 @@ export function derive(s: Save): Derived {
   return {
     total, level: lv.level, into: lv.into, need: lv.need,
     emberXP, emberEarned: earned, emberStart: start, ember,
-    awards, levelUps, openings, rooms, byDay, rhythms,
+    awards, levelUps, openings, rooms, byDay, rhythms, tierUps,
     pointsLeft: START_POINTS - pointsSpent(s.profile),
   };
 }
@@ -368,6 +380,9 @@ export function merge(a: Save, b: Save): Save {
   const fam = new Map<string, Familiar>();
   for (const f of [...(a.familiars ?? []), ...(b.familiars ?? [])]) fam.set(f.id, f);
   if (fam.size) out.familiars = [...fam.values()].sort((x, y) => x.since - y.since);
+  const rel = new Map<string, RelicChoice>();
+  for (const r of [...(a.relics ?? []), ...(b.relics ?? [])]) { const k = r.ember + r.tier, p = rel.get(k); if (!p || (r.swapped ?? r.chosen) > (p.swapped ?? p.chosen)) rel.set(k, r); }
+  if (rel.size) out.relics = [...rel.values()];
   const cairn = new Map<number, { text: string; written: number; opens: number }>();
   for (const c of [...(a.cairn ?? []), ...(b.cairn ?? [])]) cairn.set(c.written, c);
   if (cairn.size) out.cairn = [...cairn.values()];

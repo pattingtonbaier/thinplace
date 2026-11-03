@@ -5,7 +5,7 @@ import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
-  type Action, type BuildingId, type Ember,
+  RELIC_BY_ID, relicsAt, type Relic, type Action, type BuildingId, type Ember,
 } from "./content";
 import {
   addDays, dayKey, derive, lastNewMoon, EMBER_STEP, habitTicks, isOpen, levelFromXP, pointsSpent, searchActions, START_CAP, START_POINTS,
@@ -19,7 +19,7 @@ type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
   | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar"
-  | { found: BuildingId } | { level: number };
+  | { found: BuildingId } | { level: number } | { relic: { ember: Ember; tier: number; swap?: boolean } };
 
 const st = {
   s: null as unknown as Save,
@@ -44,6 +44,7 @@ const st = {
   stationAt: null as string | null, // the part of the Bothy you're standing at
   names: false, // show the names of things on the table
   famDraft: { kind: "cat" as "cat" | "hound" | "hare" | "hen", name: "" },
+  late: 0, // logging for an earlier day: how many days back (0 is today)
   motion: { grind: 0, boil: 0, notch: 0 }, // when each ritual started
 };
 
@@ -66,6 +67,7 @@ async function commit() {
       const o = st.d.openings.find((x) => x.level === up.level && x.level > 1);
       if (o) st.queue.push({ found: o.building as BuildingId });
     }
+    for (const up of st.d.tierUps.slice(before.tierUps.length)) if (!chosenRelic(up.ember, up.tier)) st.queue.push({ relic: { ember: up.ember, tier: up.tier } });
   }
   await save(st.s);
 }
@@ -91,7 +93,8 @@ function toast(msg: string) {
 async function logAction(actionId: string, extra: Partial<Log> = {}) {
   const a = ACTION_BY_ID[actionId];
   if (!a) return;
-  const l: Log = { id: uid(), ts: Date.now(), action: actionId, ...extra };
+  const back = st.late && lateAllowed(a, st.late) && !extra.habit ? st.late : 0;
+  const l: Log = { id: uid(), ts: Date.now() - back * 864e5, action: actionId, ...(back ? { late: Date.now() } : {}), ...extra };
   if (st.withSomeone && a.type === "experience") l.withSomeone = true;
   if (st.note.trim()) l.note = st.note.trim();
   st.s.logs.push(l);
@@ -149,6 +152,7 @@ function mapView() {
     level: (id: BuildingId) => st.d.openings.find((o) => o.building === id)?.level ?? 0,
     rooms: (id: BuildingId) => st.d.rooms[id] ?? {},
     ember: st.d.ember, lvl: st.d.level, look, firstTime: !st.s.done.walked,
+    wispNext: ownedRelics().some((r) => r.live?.wisp) ? (st.d.openings.find((o) => !isOpen(st.d, o.building))?.building as BuildingId ?? null) : null,
   };
   return `<section class="world-wrap" aria-label="Your Hollow">${worldSVG(ws)}
     ${st.s.done.walked ? "" : `<p class="hint">Tap the ground to walk · tap a building to go in<br><small>Arrow keys or WASD work too</small></p>`}
@@ -206,7 +210,7 @@ function tableView() {
     <details class="plain"><summary>What's on the table</summary><ul class="blist">${SPOTS.filter((x) => x.id !== "notes" || hasNotes()).map((x) => `<li><button class="brow" data-act="spot" data-arg="${x.id}"><b>${esc(x.label.split(":")[0])}</b><span>${esc(x.label.split(":")[1]?.trim() ?? "")}</span></button></li>`).join("")}</ul></details>
   </section>`;
 }
-function hasNotes() { return tasks() !== "" || gleaningDue() || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
+function hasNotes() { return tasks() !== "" || gleaningDue() || pendingRelics().length > 0 || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
 function tableData(): TableData {
   const t = today(), now = new Date();
   const samhain = (now.getMonth() === 9 && now.getDate() === 31) || (now.getMonth() === 10 && now.getDate() === 1);
@@ -216,7 +220,7 @@ function tableData(): TableData {
   const moons = Array.from({ length: 28 }, (_, k) => { const dk = addDays(t, k - 27); return (st.d.byDay[dk]?.length ?? 0) > 0 || !!st.s.journal[dk]; });
   const last = (st.d.byDay[t] ?? []).slice(-1)[0];
   const hot = last ? EMBERS.findIndex((e) => e.key === ACTION_BY_ID[last.action]?.ember) : -1;
-  const jars = EMBERS.flatMap((e) => [3, 6, 9].filter((n) => st.d.emberEarned[e.key] >= n).map((n) => `${e.name} ${"I".repeat(n / 3)}`));
+  const jars = [...ownedRelics().map((r) => r.name.replace(/ familiar$/, "")), ...pendingRelics().map(() => "to choose")];
   const fp = folklorePrompt();
   const prompt = fp ? fp.prompt.q : !st.s.quiz?.settled ? "Tonight the hearth has a question for you." : "Sit a while. What stayed with you today?";
   const cut = st.s.settings.cutoffHour, end = new Date(now); end.setHours(cut, 0, 0, 0); if (end <= now) end.setDate(end.getDate() + 1);
@@ -262,7 +266,7 @@ function attachTable() {
 }
 function useSpot(id: string) {
   const open: Record<string, Sheet> = { day: "day", tally: "tally", embers: "embers", stones: "embers", moons: "moons", relics: "relics", bag: "pack", cairn: "cairn", book: "book", notes: "notes", bowl: "look", key: "settings" };
-  if (id === "log") { st.q = ""; st.withSomeone = false; st.sheet = "log"; }
+  if (id === "log") { st.q = ""; st.withSomeone = false; st.late = 0; st.sheet = "log"; }
   else if (id === "journal" || id === "quill" || id === "prompt") { openJournal(); }
   else if (id === "map") { st.view = "hollow"; standAtDoor("bothy"); }
   else if (id === "candle") { const d = tableData(); toast(`The candle burns until ${st.s.settings.cutoffHour} am, when the day turns over. About ${Math.max(1, Math.round(d.candle * 24))} hours left in it.`); return; }
@@ -372,12 +376,39 @@ function moonsSheet() {
     <ol class="moons">${days.map((dk) => { const n = st.d.byDay[dk]?.length ?? 0, j = st.s.journal[dk]; return `<li class="${n || j ? "kept" : ""} ${dk === t ? "now" : ""}" title="${dk}"><i aria-hidden="true"></i><span>${Number(dk.slice(8))}</span><span class="sr">${n} logs${j ? ", journal written" : ""}</span></li>`; }).join("")}</ol>
     ${year ? `<section class="card"><h3>On this night, a year ago</h3>${year.text ? `<p>“${esc(year.text)}”</p>` : ""}${year.paper ? `<p class="quiet">Written in ${pageRef(year.paper)}. Go to the shelf and read the page.</p>` : ""}${year.pressed ? `<img class="pressed" data-page="${addDays(t, -365)}" alt="The page you pressed a year ago"/>` : ""}</section>` : ""}`);
 }
+// ---------- relics ----------
+const chosenRelic = (ember: Ember, tier: number) => (st.s.relics ?? []).find((r) => r.ember === ember && r.tier === tier);
+const ownedRelics = (): Relic[] => (st.s.relics ?? []).map((r) => RELIC_BY_ID[r.relic]).filter(Boolean);
+const pendingRelics = () => st.d.tierUps.filter((u) => !chosenRelic(u.ember, u.tier));
+const isSamhain = () => { const n = new Date(); return (n.getMonth() === 9 && n.getDate() === 31) || (n.getMonth() === 10 && n.getDate() === 1); };
+const canSwap = () => isSamhain() && st.s.done.relicSwapYear !== new Date().getFullYear();
+function tierMemory(ember: Ember, tier: number): string {
+  const up = st.d.tierUps.find((u) => u.ember === ember && u.tier === tier);
+  const l = up && st.s.logs.find((x) => x.id === up.logId);
+  return up ? `${fmtDate(up.ts)}${l ? `, the day you logged “${esc(ACTION_BY_ID[l.action]?.name.toLowerCase() ?? "")}”` : ""}` : "";
+}
+function relicCard(r: Relic, act: string, label: string) {
+  return `<section class="card relic ${r.side}"><p class="label">${r.side === "steady" ? "Steady" : "Deep"} · ${r.family}</p><h3>${esc(r.name)}</h3><p class="lore">${esc(r.lore)}</p><p>${esc(r.effect)}</p>
+    ${r.live ? "" : `<p class="quiet">This one wakes when the monsters and runs arrive in a later build.</p>`}
+    <button class="primary wide" data-act="${act}" data-arg="${r.ember}:${r.tier}:${r.id}">${label}</button></section>`;
+}
+function relicChoiceSheet(ember: Ember, tier: number, swap = false) {
+  const [a, b] = relicsAt(ember, tier), mine = chosenRelic(ember, tier);
+  const title = swap ? "The Samhain swap" : `${emberName(ember)}, tier ${tier}`;
+  return sheetWrap(title, `<p class="blurb">${swap ? `Once a year, at Samhain, you may give back a relic for its other. You carry the ${esc(RELIC_BY_ID[mine!.relic].name)} now.` : `Your ${emberName(ember)} has earned its ${["first", "second", "third"][tier - 1]} relic, on ${tierMemory(ember, tier)}. Choose one to carry. Neither changes how much a log is worth: they differ in how the game treats you.`}</p>
+    ${[a, b].filter((r) => !swap || r.id !== mine?.relic).map((r) => relicCard(r, "pick-relic", swap ? `Take the ${r.name} instead` : `Carry the ${r.name}`)).join("")}
+    ${swap ? "" : `<button class="ghost wide" data-act="close">Decide later</button><p class="quiet">The jar waits on the shelf until you choose.</p>`}`, { cls: "relics-sheet" });
+}
 function relicsSheet() {
   const p = st.s.profile!, c = CALLING_BY_ID[p.calling];
-  const reached = EMBERS.flatMap((e) => [3, 6, 9].filter((n) => st.d.emberEarned[e.key] >= n).map((n) => `${e.name}, tier ${n / 3}`));
-  return sheetWrap("The relic jars", `${c ? `<p><b>${c.charm}.</b> ${c.charmText}</p>` : `<p>Your calling is settled on night 7 of your first week, and its charm with it.</p>`}
-    ${reached.length ? `<p class="label">Tiers reached</p><ul class="found">${reached.map((r) => `<li>${esc(r)}</li>`).join("")}</ul><p class="quiet">Choosing between a steady and a deep relic comes in a later build. Your jars are kept until then.</p>`
-      : `<p class="quiet">A jar is filled when an ember earns its third point by logging. The first one is waiting on the shelf.</p>`}`);
+  const mine = (st.s.relics ?? []).map((ch) => ({ ch, r: RELIC_BY_ID[ch.relic] })).filter((x) => x.r);
+  const pend = pendingRelics();
+  return sheetWrap("The relic jars", `${c ? `<section class="card"><p class="label">Your calling's charm</p><h3>${esc(c.charm)}</h3><p>${esc(c.charmText)}</p></section>` : ""}
+    ${pend.map((u) => `<section class="card waiting"><h3>A jar waits: ${emberName(u.ember)}, tier ${u.tier}</h3><p class="quiet">Earned ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}
+    ${mine.map(({ ch, r }) => `<section class="card relic"><p class="label">${emberName(r.ember)} · tier ${r.tier} · ${r.family}</p><h3>${esc(r.name)}</h3><p>${esc(r.effect)}</p><p class="quiet">Earned ${tierMemory(r.ember, r.tier)}.${r.live ? "" : " It wakes when the monsters arrive."}</p>
+      ${canSwap() ? `<button class="link" data-act="relic-swap" data-arg="${r.ember}:${r.tier}">Swap it at Samhain</button>` : ""}</section>`).join("")}
+    ${!mine.length && !pend.length ? `<p class="blurb">A jar is filled when an ember earns its third point by logging, and again at its sixth and ninth. Each time you choose one of two relics: one for a steady life, one for a deep one.</p>` : ""}
+    ${!canSwap() && mine.length ? `<p class="quiet">Once a year, at Samhain, you can swap a relic for its other.</p>` : ""}`);
 }
 function packSheet() {
   return sheetWrap("The crane bag", `<p class="blurb">Pack your whole Hollow into the bag, to keep it safe or carry it to another device.</p>
@@ -401,7 +432,7 @@ function bookSheet() {
     ${st.s.settings.paper ? `<p class="label">Gleanings from your notebooks</p>${gl || `<p class="quiet">At each new moon, the table asks you to copy a few lines from the month's pages in here.</p>`}<button class="ghost wide" data-act="glean">Glean now</button>${books ? `<p class="label">Your notebooks</p><ul class="found">${books}</ul>` : ""}` : ""}`);
 }
 function notesSheet() {
-  return sheetWrap("A slip of reminders", `${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
+  return sheetWrap("A slip of reminders", `${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
 }
 
 // ---------- sheets ----------
@@ -424,16 +455,23 @@ function recentActions(): Action[] {
 }
 
 function logResults() {
-  const res = st.q.trim() ? searchActions(st.q) : recentActions();
+  const res = (st.q.trim() ? searchActions(st.q, st.late ? 30 : 8) : st.late ? ACTIONS.filter((a) => lateAllowed(a, st.late)).slice(0, 12) : recentActions()).filter((a) => !st.late || lateAllowed(a, st.late));
   if (!res.length) return `<p class="quiet">Nothing matches “${esc(st.q)}” yet. Try a simpler word, like “walk” or “read”.</p>`;
   return `${st.q.trim() ? "" : `<p class="label">Quick picks</p>`}<ul class="actions">${res.map(actionRow).join("")}</ul>`;
 }
 
+// Relics that let a log be added for an earlier day.
+function lateAllowed(a: Action, days: number): boolean {
+  return ownedRelics().some((r) => { const y = r.live?.yesterday; if (!y || days > (y.days ?? 1)) return false;
+    return !!(y.buildings?.includes(a.building) || y.actions?.includes(a.id) || (y.withSomeone && st.withSomeone)); });
+}
+function lateMax(): number { return Math.max(0, ...ownedRelics().map((r) => (r.live?.yesterday ? r.live.yesterday.days ?? 1 : 0))); }
 function logSheet() {
   return sheetWrap("Into the mortar", `
     <label class="field"><span class="sr">Search what you did</span><input id="q" type="search" autocomplete="off" placeholder="What did you do? ran, cooked, read…" value="${esc(st.q)}" data-input="q"/></label>
     <div class="chips"><button class="chip ${st.withSomeone ? "on" : ""}" data-act="with" aria-pressed="${st.withSomeone}">With someone</button>
     <input class="note" placeholder="Add a note (optional)" value="${esc(st.note)}" data-input="note" aria-label="Note"/></div>
+    ${lateMax() ? `<div class="chips wrap"><span class="quiet">When?</span>${Array.from({ length: lateMax() + 1 }, (_, d) => `<button class="chip ${st.late === d ? "on" : ""}" data-act="late" data-arg="${d}" aria-pressed="${st.late === d}">${["Today", "Yesterday", "2 days ago", "3 days ago"][d]}</button>`).join("")}</div>${st.late ? `<p class="quiet">Your relics let some things be added late. Only those are shown.</p>` : ""}` : ""}
     <div id="results">${logResults()}</div>`, { cls: "logsheet" });
 }
 
@@ -757,6 +795,7 @@ function sheet() {
   if (sh === "glean") return gleanSheet();
   if ("found" in sh) return foundSheet(sh.found);
   if ("level" in sh) return levelSheet(sh.level);
+  if ("relic" in sh) return relicChoiceSheet(sh.relic.ember, sh.relic.tier, sh.relic.swap);
   return "";
 }
 
@@ -867,7 +906,7 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "leave-bothy": st.view = "hollow"; standAtDoor("bothy"); break;
     case "station-go": { if (arg === "desk") { sit(); return; } placeAt(arg); st.stationAt = arg; break; }
     case "toggle-list": st.list = !st.list; break;
-    case "open-log": st.q = ""; st.withSomeone = false; st.sheet = "log"; break;
+    case "open-log": st.q = ""; st.withSomeone = false; st.late = 0; st.sheet = "log"; break;
     case "open-journal": openJournal(); break;
     case "close": st.sheet = null; nextSheet(); break;
     case "next": nextSheet(); break;
@@ -884,6 +923,17 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "bk": { keepJournalDraft(); const p0 = paperPos(); st.journalDraft.book = Math.max(1, p0.book + Number(arg)); st.journalDraft.page = Number(arg) > 0 ? 1 : p0.page; break; }
     case "pg": { keepJournalDraft(); const p0 = paperPos(); st.journalDraft.book = p0.book; st.journalDraft.page = Math.max(1, p0.page + Number(arg)); break; }
     case "glean": st.sheet = "glean"; break;
+    case "relic-open": { const [e, t] = arg.split(":"); st.sheet = { relic: { ember: e as Ember, tier: Number(t) } }; break; }
+    case "relic-swap": { const [e, t] = arg.split(":"); st.sheet = { relic: { ember: e as Ember, tier: Number(t), swap: true } }; break; }
+    case "pick-relic": {
+      const [e, t, id] = arg.split(":"), tier = Number(t), now = Date.now(), list = (st.s.relics ??= []);
+      const prev = list.find((r) => r.ember === e && r.tier === tier);
+      if (prev) { prev.relic = id; prev.swapped = now; st.s.done.relicSwapYear = new Date().getFullYear(); }
+      else list.push({ ember: e as Ember, tier, relic: id, chosen: now });
+      await commit(); st.sheet = null; nextSheet();
+      toast(`${RELIC_BY_ID[id].name}: corked, labelled and on the shelf.`); return;
+    }
+    case "late": st.late = Number(arg); break;
     case "fam-kind": st.famDraft.name = (document.querySelector("[data-input=famname]") as HTMLInputElement)?.value ?? st.famDraft.name; st.famDraft.kind = arg as any; break;
     case "fam-add": st.famDraft = { kind: "cat", name: "" }; st.sheet = "familiar"; break;
     case "fam-save": {

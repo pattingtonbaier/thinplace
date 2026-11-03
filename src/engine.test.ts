@@ -124,6 +124,23 @@ describe("rhythms", () => {
   });
 });
 
+describe("relics", () => {
+  test("an ember tier is reached, dated to the log that reached it", () => {
+    const s = withProfile();
+    // finishing a book is 100 Insight; nine of them is 900, three points earned: tier 1
+    s.logs = Array.from({ length: 9 }, (_, i) => log("b" + i, "finish-book", T0 + i * 48 * H));
+    const d = derive(s);
+    expect(d.emberEarned.I).toBe(3);
+    expect(d.tierUps).toEqual([{ ember: "I", tier: 1, ts: T0 + 8 * 48 * H, logId: "b8" }]);
+  });
+  test("a relic choice syncs, and the later swap wins", () => {
+    const a = withProfile(), b: Save = JSON.parse(JSON.stringify(a));
+    a.relics = [{ ember: "I", tier: 1, relic: "scrollcase", chosen: T0 }];
+    b.relics = [{ ember: "I", tier: 1, relic: "hazelnut", chosen: T0, swapped: T0 + H }];
+    expect(merge(a, b).relics).toEqual([{ ember: "I", tier: 1, relic: "hazelnut", chosen: T0, swapped: T0 + H }]);
+  });
+});
+
 describe("merge", () => {
   test("logs from two devices combine without duplicates, and deletions travel", () => {
     const a = withProfile();
