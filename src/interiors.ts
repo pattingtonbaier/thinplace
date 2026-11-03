@@ -144,10 +144,155 @@ function stoneFieldFront() {
   const F: Pt[] = [P(A, A, 0), P(A, -A, 0), P(A, -A, 18), P(A, A, 18)]; poly(F, "#aaa59d", 2.2); hatch(F, 3.6, "#7d7871");
 }
 
+// ---------- the Ogham Tower: a lighthouse cut open, a floor per room ----------
+// Front-on, like the lighthouse concept: the Whispering Well in the cellar, the Hedge Library on the ground,
+// the subject floor above, and a lantern room that lights once all three are made.
+const TOWER = { w: 820, h: 1000, x0: 232, x1: 588, wall: 30 };
+const FLOORS = { cellar: [826, 962], library: [650, 812], subject: [480, 636], lantern: [334, 466] } as const;
+const TOWER_ROOMS = ["the Hedge Library", "a subject floor", "the Whispering Well"];
+function rect2(x0: number, y0: number, x1: number, y1: number): Pt[] { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
+function books(x0: number, x1: number, y: number, seed: number) {
+  let x = x0, k = 0;
+  while (x < x1 - 6) { const w = 6 + h2(seed, k) * 6, hh = 22 + h2(k, seed) * 12, tone = ["#6f6b65", "#e3dfd8", "#9d988f", "#3a3733", "#cfcac2"][(k + seed) % 5];
+    if (h2(k, seed + 3) < 0.12 && x + 24 < x1) { poly([[x, y], [x + 26, y], [x + 26, y - 7], [x, y - 7]], tone, 1.1); x += 28; k++; continue; } // a book lying flat
+    poly([[x, y], [x + w, y], [x + w, y - hh], [x, y - hh]], tone, 1.1); x += w + 1; k++; }
+}
+function towerStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { x0, x1, wall } = TOWER, ix0 = x0 + wall, ix1 = x1 - wall;
+  c.fillStyle = "#d4cfc7"; c.fillRect(0, 0, TOWER.w, TOWER.h);
+  for (let k = 0; k < 1200; k++) { c.fillStyle = "rgba(30,28,26,.06)"; c.fillRect(h2(k, 1) * TOWER.w, h2(k, 2) * TOWER.h, 1.4, 1.4); }
+  // the hill, and the ground cut through below it
+  poly([[0, 830], [140, 806], [300, 812], [520, 808], [700, 800], [820, 812], [820, 1000], [0, 1000]], "#bdb7ac", 2.4);
+  hatch([[0, 830], [820, 812], [820, 1000], [0, 1000]], 6, "#8d887f");
+  for (let k = 0; k < 40; k++) { const x = h2(k, 5) * 820, y = 850 + h2(k, 6) * 140; ell(x, y, 4 + h2(k, 7) * 6, 2 + h2(k, 8) * 3, "#a8a196", 1); }
+  for (let k = 0; k < 60; k++) { const x = h2(k, 11) * 820; if (x > x0 - 20 && x < x1 + 20) continue; const y = 812 + (x < 410 ? 10 : -4); line([[x, y], [x - 2, y - 7]], 1.1, "#6d6862"); line([[x + 2, y], [x + 4, y - 6]], 1.1, "#6d6862"); }
+  // the back wall inside, lime-washed, and the cellar
+  poly(rect2(ix0, 330, ix1, 962), "#e9e5dc", 0);
+  for (let r = 0; r < 24; r++) for (let q = 0; q < 6; q++) if (h2(r, q * 7) < 0.18) { const y = 344 + r * 26, x = ix0 + 8 + q * 48 + (r % 2) * 24; poly(rect2(x, y, x + 40, y + 18), "#dcd8d1", 1, "#9d988f"); }
+  // windows in the back wall, one to each floor, with the sky in them
+  for (const [y0, y1, cx] of [[690, 760, 410], [516, 584, 470], [360, 430, 410]] as [number, number, number][]) {
+    const W: Pt[] = [[cx - 22, y1], [cx - 22, y0 + 20], [cx - 14, y0 + 6], [cx, y0], [cx + 14, y0 + 6], [cx + 22, y0 + 20], [cx + 22, y1]];
+    poly(W, "#f4f2ed", 2.2); clipTo(W, () => { line([[cx - 40, y1 - 14], [cx - 10, y1 - 22], [cx + 30, y1 - 18]], 1.4, "#9d988f"); });
+    line([[cx, y0], [cx, y1]], 1.8); poly(rect2(cx - 26, y1, cx + 26, y1 + 6), "#cfcac2", 1.6);
+  }
+  // the walls, cut through: thick coursed stone
+  for (const [a, b] of [[x0, ix0], [ix1, x1]]) {
+    const Wl = rect2(a, 330, b, 962); poly(Wl, "#bdb8b0", 2.6);
+    clipTo(Wl, () => { for (let y = 330; y < 962; y += 14) { const off = ((y / 14) % 2) * 9; for (let x = a - 20 + off; x < b; x += 18) poly(rect2(x, y + 1, x + 16, y + 12), h2(x, y) < 0.3 ? "#a8a39b" : null, 0.9, "#6d6862"); } });
+    poly(Wl, null, 2.8);
+  }
+  // timber floors
+  for (const y of [FLOORS.library[1], FLOORS.subject[1], FLOORS.lantern[1], 330]) {
+    const F = rect2(ix0, y, ix1, y + 14); poly(F, "#a8977a", 2.2); for (let x = ix0 + 30; x < ix1; x += 46) line([[x, y + 2], [x, y + 12]], 1, "#6f6252");
+  }
+  poly(rect2(ix0, 962, ix1, 972), "#9d988f", 2); // the cellar floor
+  // the stair, climbing the right wall from floor to floor
+  for (const [fy, ty] of [[962, 826], [812, 664], [636, 494], [466, 344]] as [number, number][]) {
+    const n = 8, sx = ix1 - 92, w = 92;
+    for (let k = 0; k < n; k++) { const y = fy - (k + 1) * ((fy - ty) / n), x = sx + (k * w) / n; poly(rect2(x, y, ix1, y + (fy - ty) / n), k % 2 ? "#cfcac2" : "#d9d5ce", 1.2); }
+    poly([[ix1 - 40, ty], [ix1, ty], [ix1, ty + 14], [ix1 - 40, ty + 14]], "#e9e5dc", 0); // the hatch in the floor above
+  }
+  // the roof: a cone of slates over the parapet, and a finial
+  const roof: Pt[] = [[x0 - 26, 334], [410, 150], [x1 + 26, 334]];
+  poly(roof, "#77736d", 2.6); clipTo(roof, () => { for (let y = 160; y < 340; y += 10) line([[0, y], [820, y]], 1, "#4c4945"); for (let y = 160; y < 340; y += 10) for (let x = (y / 10) % 2 ? 0 : 9; x < 820; x += 18) line([[x, y], [x, y + 10]], 0.8, "#4c4945"); });
+  poly([[x0 - 30, 334], [x1 + 30, 334], [x1 + 30, 344], [x0 - 30, 344]], "#9d988f", 2.2);
+  line([[410, 150], [410, 116]], 2.6); poly([[410, 112], [432, 120], [410, 128]], "#9d988f", 1.4);
+  // Ogham cut up the outside of the doorway
+  for (let k = 0; k < 7; k++) line([[x0 - 6, 790 - k * 9], [x0 + 4, 790 - k * 9]], 1.4);
+  line([[x0 - 1, 800], [x0 - 1, 724]], 1.6);
+
+  // ---- the Hedge Library ----
+  if (open("the Hedge Library")) {
+    const [ty, fy] = FLOORS.library;
+    for (const [sx0, sx1] of [[ix0 + 8, 372], [448, ix1 - 100]] as [number, number][]) {
+      poly(rect2(sx0, ty + 18, sx1, fy), "#9d8a70", 2.2);
+      for (const sy of [ty + 58, ty + 100, ty + 142]) { poly(rect2(sx0 + 4, sy - 38, sx1 - 4, sy), "#3a3733", 1); books(sx0 + 6, sx1 - 6, sy, Math.round(sx0 + sy)); poly(rect2(sx0, sy, sx1, sy + 5), "#b8a98f", 1.2); }
+    }
+  } else chalkAt(380, FLOORS.library[1] - 14);
+  // ---- the subject floor ----
+  if (open("a subject floor")) {
+    const [ty, fy] = FLOORS.subject;
+    // a slate with Ogham chalked on it, and a star chart pinned beside it
+    poly(rect2(ix0 + 14, ty + 30, ix0 + 120, ty + 104), "#3a3733", 2.2); poly(rect2(ix0 + 10, ty + 26, ix0 + 124, ty + 108), null, 3, "#8d7a62");
+    c.strokeStyle = "#e9e5dc"; c.lineWidth = 1.4; c.beginPath(); c.moveTo(ix0 + 24, ty + 66); c.lineTo(ix0 + 110, ty + 66);
+    for (let k = 0; k < 12; k++) { const x = ix0 + 30 + k * 7, up = k % 3 === 0; c.moveTo(x, up ? ty + 56 : ty + 66); c.lineTo(x + (k % 4 === 1 ? 4 : 0), up ? ty + 66 : ty + 76); } c.stroke();
+    c.font = `italic 13px 'IM Fell English', Georgia, serif`; c.fillStyle = "#e9e5dc"; c.textAlign = "left"; c.fillText("beith, luis, fearn", ix0 + 22, ty + 94);
+    const Sc: Pt[] = rect2(520 - 60, ty + 30, 520, ty + 92); poly(Sc, "#e3d9c6", 1.6);
+    for (let k = 0; k < 9; k++) ell(470 + h2(k, 3) * 44, ty + 38 + h2(k, 4) * 48, 1.6, 1.6, INK);
+    line([[474, ty + 50], [488, ty + 62], [506, ty + 56], [500, ty + 80]], 0.9);
+  } else chalkAt(380, FLOORS.subject[1] - 14);
+  // ---- the Whispering Well ----
+  if (!open("the Whispering Well")) chalkAt(410, 948);
+}
+function chalkAt(x: number, y: number) {
+  c.save(); c.setLineDash([3, 4]); ell(x, y, 22, 8, null); c.lineWidth = 1.4; c.strokeStyle = "#8d887f"; c.stroke(); c.setLineDash([]);
+  c.font = `17px ${FELL_SC}`; c.fillStyle = "#7d7871"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("?", x, y - 1); c.restore();
+}
+function towerThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], { x0, x1, wall } = TOWER, ix0 = x0 + wall, ix1 = x1 - wall;
+  if (open("the Hedge Library")) out.push({ depth: 1, draw: () => {
+    const fy = FLOORS.library[1];
+    // a wing chair, a reading table with a candle, and a stack of books on the floor
+    poly([[300, fy], [300, fy - 74], [314, fy - 86], [338, fy - 84], [340, fy - 40], [370, fy - 40], [372, fy]], "#8d887f", 2.2); hatch([[300, fy], [300, fy - 74], [314, fy - 86], [338, fy - 84], [340, fy - 40], [370, fy - 40], [372, fy]], 4, "#5f5b55");
+    poly(rect2(336, fy - 44, 378, fy - 30), "#cfcac2", 1.8);
+    poly(rect2(392, fy - 46, 446, fy - 40), "#9d8a70", 1.8); line([[400, fy - 40], [400, fy]], 2.4); line([[438, fy - 40], [438, fy]], 2.4);
+    poly(rect2(414, fy - 64, 422, fy - 46), "#ece8e0", 1.2); flameAt(c, 418, fy - 66, 0.4, t);
+    for (let k = 0; k < 4; k++) poly(rect2(452 + (k % 2) * 3, fy - 8 - k * 8, 486 + (k % 2) * 3, fy - k * 8), ["#6f6b65", "#e3dfd8", "#3a3733", "#cfcac2"][k], 1.2);
+  } });
+  if (open("a subject floor")) out.push({ depth: 2, draw: () => {
+    const fy = FLOORS.subject[1];
+    // the lectern with an open book, an astrolabe on a stand, a three-legged stool
+    line([[420, fy], [420, fy - 64]], 4); poly([[404, fy], [436, fy], [430, fy - 6], [410, fy - 6]], "#6f6b65", 1.6);
+    poly([[388, fy - 66], [452, fy - 80], [456, fy - 70], [394, fy - 56]], "#8d887f", 2);
+    poly([[392, fy - 68], [420, fy - 74], [422, fy - 66], [396, fy - 60]], "#efe8da", 1.1); poly([[420, fy - 74], [448, fy - 80], [450, fy - 72], [422, fy - 66]], "#efe8da", 1.1);
+    line([[492, fy], [492, fy - 54]], 2.6); poly([[480, fy], [504, fy], [498, fy - 4], [486, fy - 4]], "#6f6b65", 1.4);
+    ell(492, fy - 76, 22, 22, null, 2.2); ell(492, fy - 76, 14, 14, null, 1.2); line([[472, fy - 70], [512, fy - 82]], 1.6); ell(492, fy - 76, 3, 3, "#c9b48c", 1);
+    poly(rect2(ix0 + 24, fy - 30, ix0 + 70, fy - 24), "#b8a98f", 1.6); for (const x of [ix0 + 28, ix0 + 47, ix0 + 66]) line([[x, fy - 24], [x - 3 + (x - ix0 - 47) * 0.1, fy]], 2.2);
+  } });
+  if (open("the Whispering Well")) out.push({ depth: 0, draw: () => {
+    const fy = 962, cx = 380;
+    // a round well-head of stone, a windlass, and a brass ear-trumpet on the wall for the voices that come up
+    poly(rect2(cx - 50, fy - 40, cx + 50, fy), "#cfcac2", 2.2); for (let r = 0; r < 3; r++) for (let q = 0; q < 5; q++) poly(rect2(cx - 50 + q * 20 + (r % 2) * 10, fy - 40 + r * 13, cx - 32 + q * 20 + (r % 2) * 10, fy - 29 + r * 13), null, 0.9, "#6d6862");
+    ell(cx, fy - 40, 50, 9, "#2f2c29", 2);
+    for (let k = 0; k < 2; k++) { const rr = 10 + ((t * 0.5 + k / 2) % 1) * 30; c.globalAlpha = 1 - rr / 40; ell(cx, fy - 40, rr, rr * 0.18, null); c.strokeStyle = "#9d988f"; c.lineWidth = 1; c.stroke(); c.globalAlpha = 1; }
+    for (const dx of [-44, 44]) line([[cx + dx, fy - 40], [cx + dx, fy - 104]], 3);
+    line([[cx - 48, fy - 100], [cx + 48, fy - 100]], 5); line([[cx + 48, fy - 100], [cx + 60, fy - 88]], 2.4);
+    line([[cx + 6, fy - 100], [cx + 6, fy - 62]], 1); poly(rect2(cx - 2, fy - 62, cx + 14, fy - 50), "#8d7a62", 1.4);
+    const hx = ix0 + 30, hy = fy - 120; poly([[hx, hy], [hx + 50, hy - 18], [hx + 50, hy + 18]], "#c9b48c", 1.8); line([[hx, hy], [hx - 12, hy + 26]], 2.2, "#8d7a62");
+    for (let k = 0; k < 3; k++) { const ph = (t * 0.6 + k / 3) % 1; c.globalAlpha = 1 - ph; c.beginPath(); c.arc(hx + 54, hy, 8 + ph * 26, -0.6, 0.6); c.strokeStyle = "#8d887f"; c.lineWidth = 1.2; c.stroke(); c.globalAlpha = 1; }
+  } });
+  // the lantern room: lit when every floor below is made
+  out.push({ depth: 3, draw: () => {
+    const fy = FLOORS.lantern[1], all = TOWER_ROOMS.every(open);
+    if (!all) { for (let k = 0; k < 3; k++) poly(rect2(300 + k * 36, fy - 26 - (k % 2) * 4, 330 + k * 36, fy), "#b8a98f", 1.6); return; }
+    poly(rect2(372, fy - 10, 448, fy), "#6f6b65", 2); poly(rect2(378, fy - 92, 442, fy - 10), "rgba(247,241,223,.65)", 2.4);
+    for (const x of [394, 410, 426]) line([[x, fy - 92], [x, fy - 10]], 1.2); poly([[372, fy - 92], [410, fy - 116], [448, fy - 92]], "#3a3733", 2);
+    c.globalAlpha = 0.18; ell(410, fy - 56, 120, 70, "#d2483a"); c.globalAlpha = 1; flameAt(c, 410, fy - 24, 1.1, t);
+  } });
+  void x1;
+  return out;
+}
+const TOWER_SPOTS: Spot[] = [
+  { room: "the Hedge Library", at: [0, 0], hot: [0, 0], name: "the Hedge Library" },
+  { room: "a subject floor", at: [0, 0], hot: [0, 0], name: "a subject floor" },
+  { room: "the Whispering Well", at: [0, 0], hot: [0, 0], name: "the Whispering Well" },
+];
+const towerBand = (i: number): [number, number] => i === 0 ? [FLOORS.library[0], FLOORS.library[1]] : i === 1 ? [FLOORS.subject[0], FLOORS.subject[1]] : [FLOORS.cellar[0], 962];
+
 // ---------- the shared frame ----------
-type Scene = { spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void };
+type Scene = {
+  spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
+  size?: [number, number]; // a front-on scene has its own size; isometric ones share the yard's
+  hit?: (x: number, y: number) => number; stand?: (i: number) => [number, number, number]; labelAt?: (i: number) => Pt;
+};
 const SCENES: Partial<Record<BuildingId, Scene>> = {
   "stone-field": { spots: STONE_FIELD, still: stoneFieldStill, things: stoneFieldThings, front: stoneFieldFront },
+  "ogham-tower": {
+    spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],
+    hit: (x, y) => (x < TOWER.x0 - 40 || x > TOWER.x1 + 40 ? -1 : [0, 1, 2].find((i) => { const [a, b] = towerBand(i); return y >= a - 10 && y <= b + 10; }) ?? -1),
+    stand: (i) => [i === 2 ? 300 : 330, towerBand(i)[1], 0.62],
+    labelAt: (i) => [TOWER.x0 + 110, towerBand(i)[0] + 16],
+  },
 };
 export const hasScene = (id: BuildingId) => !!SCENES[id];
 export const sceneRooms = (id: BuildingId) => SCENES[id]?.spots.map((s) => s.room) ?? [];
@@ -157,31 +302,34 @@ export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Roo
   cancelAnimationFrame(raf);
   const sc = SCENES[id]; if (!sc) return;
   const DPR = Math.min(2, devicePixelRatio || 1), ctx = cv.getContext("2d")!;
-  const still = document.createElement("canvas"); still.width = VW * DPR; still.height = VH * DPR;
+  const [W, H] = sc.size ?? [VW, VH];
+  cv.style.maxWidth = `min(100%, calc((100dvh - 330px) * ${(W / H).toFixed(3)}))`;
+  const still = document.createElement("canvas"); still.width = W * DPR; still.height = H * DPR;
   c = still.getContext("2d")!; c.scale(DPR, DPR); sc.still(rooms);
   let scale = 1, rect = cv.getBoundingClientRect();
-  const size = () => { rect = cv.getBoundingClientRect(); scale = rect.width / VW; cv.width = rect.width * DPR; cv.height = Math.round(VH * scale) * DPR; cv.style.height = Math.round(VH * scale) + "px"; rect = cv.getBoundingClientRect(); };
+  const size = () => { rect = cv.getBoundingClientRect(); scale = rect.width / W; cv.width = rect.width * DPR; cv.height = Math.round(H * scale) * DPR; cv.style.height = Math.round(H * scale) + "px"; rect = cv.getBoundingClientRect(); };
   size(); const onResize = () => size(); addEventListener("resize", onResize);
   cv.onpointerdown = (e) => {
     const wx = (e.clientX - rect.left) / scale, wy = (e.clientY - rect.top) / scale;
     let best = -1, bd = 120;
-    sc.spots.forEach((s, i) => { const [x, y] = P(s.hot[0], s.hot[1]); const d = Math.hypot(wx - x, (wy - (y - 30)) * 0.9); if (d < bd) { bd = d; best = i; } });
+    if (sc.hit) best = sc.hit(wx, wy);
+    else sc.spots.forEach((s, i) => { const [x, y] = P(s.hot[0], s.hot[1]); const d = Math.hypot(wx - x, (wy - (y - 30)) * 0.9); if (d < bd) { bd = d; best = i; } });
     if (best >= 0) onTap(best);
   };
-  const spot = sc.spots[Math.min(selected, sc.spots.length - 1)];
+  const sel = Math.min(selected, sc.spots.length - 1), spot = sc.spots[sel];
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const frame = (now: number) => {
     if (!cv.isConnected) { removeEventListener("resize", onResize); return; }
     const t = reduce ? 0 : now / 1000;
     ctx.setTransform(DPR * scale, 0, 0, DPR * scale, 0, 0);
-    ctx.drawImage(still, 0, 0, VW, VH); c = ctx;
-    const items = [...sc.things(rooms, t), { depth: spot.at[0] + spot.at[1], draw: () => { const [x, y] = P(spot.at[0], spot.at[1]); c.beginPath(); c.ellipse(x, y + 2, 26, 9, 0, 0, Math.PI * 2); c.strokeStyle = "#d2483a"; c.lineWidth = 2; c.stroke(); drawScath(c, x, y, 0.5, t, look, false, 0, 1); } }];
+    ctx.drawImage(still, 0, 0, W, H); c = ctx;
+    const [sx, sy, ss] = sc.stand ? sc.stand(sel) : [...P(spot.at[0], spot.at[1]), 0.5];
+    const items = [...sc.things(rooms, t), { depth: sc.stand ? 99 : spot.at[0] + spot.at[1], draw: () => { c.beginPath(); c.ellipse(sx, sy + 2, 52 * ss, 18 * ss, 0, 0, Math.PI * 2); c.strokeStyle = "#d2483a"; c.lineWidth = 2; c.stroke(); drawScath(c, sx, sy, ss, t, look, false, 0, 1); } }];
     items.sort((a, b) => a.depth - b.depth).forEach((o) => o.draw());
     sc.front();
-    if (labels) sc.spots.forEach((s) => { const [x, y] = P(s.hot[0], s.hot[1]); tag(s.name, [x, y - 96], !(s.room in rooms)); });
+    if (labels) sc.spots.forEach((s, i) => { const at: Pt = sc.labelAt ? sc.labelAt(i) : ((p) => [p[0], p[1] - 96] as Pt)(P(s.hot[0], s.hot[1])); tag(s.name, at, !(s.room in rooms)); });
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
 }
-// keep flameAt referenced for scenes that use fire (the Forge next)
-void flameAt;
+
