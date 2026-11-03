@@ -283,3 +283,7 @@ img.pressed { display: block; max-width: 100%; border: 2px solid var(--ink); mar
 .relic.deep { background: #ebe5d8; }
 .card.waiting { border-style: dashed; border-color: var(--red); }
 .relics-sheet .card { margin-top: 12px; }
+#interior { display: block; width: 100%; border: 2.5px solid var(--ink); border-radius: var(--wob); background: #d4cfc7; touch-action: manipulation; max-width: min(100%, calc((100dvh - 330px) * 1.52)); margin-inline: auto; }
+.inside.working { padding: 10px max(12px, env(safe-area-inset-left, 0px)) 16px; }
+.inside.working .inhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.rooms-tabs { margin-top: 10px; }

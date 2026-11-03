@@ -2,6 +2,7 @@ import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
 import { attachBothy, placeAt, STATIONS } from "./bothy";
 import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table";
+import { attachInterior, hasScene, sceneRooms } from "./interiors";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
@@ -161,6 +162,16 @@ function mapView() {
 
 function insideView(id: BuildingId) {
   const b = BUILDINGS.find((x) => x.id === id)!;
+  if (hasScene(id)) {
+    const rs = sceneRooms(id), i = Math.min(st.station, rs.length - 1), room = rs[i];
+    const made = st.d.rooms[id]?.[room] !== undefined;
+    const acts = ACTIONS.filter((a) => a.building === id && a.room === room);
+    return `<section class="inside working" aria-label="Inside ${esc(b.name)}">
+      <div class="inhead"><h2>${esc(b.name)}</h2><button class="ghost" data-act="leave">Leave</button></div>
+      <canvas id="interior" role="application" aria-label="${esc(b.name)}, in cutaway. Tap a part of it to go there."></canvas>
+      <div class="chips wrap rooms-tabs" role="tablist">${rs.map((r, k) => `<button class="chip ${k === i ? "on" : ""}" role="tab" aria-selected="${k === i}" data-act="station" data-arg="${k}">${esc(r[0].toUpperCase() + r.slice(1))}</button>`).join("")}</div>
+      <section class="card station"><h3>${esc(room[0].toUpperCase() + room.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.map(actionRow).join("")}</ul></section></section>`;
+  }
   const rooms = roomsOf(id), i = Math.min(st.station, rooms.length - 1), room = rooms[i];
   const look = lookToOpts(st.s.profile!.look, glowSize());
   const acts = ACTIONS.filter((a) => a.building === id && a.room === room && a.id !== "journal");
@@ -298,6 +309,7 @@ function enterBuilding(id: BuildingId) {
   if (id === "bothy") { st.inside = null; st.view = "bothy"; st.bothy = "room"; placeAt("desk"); st.stationAt = "desk"; render(); return; }
   st.inside = id;
   st.station = 0;
+  st.s.done["visits-" + id] = (st.s.done["visits-" + id] ?? 0) + 1;
   st.view = "hollow";
   render();
 }
@@ -881,6 +893,8 @@ function render() {
   if (document.getElementById("world")) attachWorld(worldHooks);
   if (document.getElementById("room")) attachRoom();
   if (document.getElementById("table")) attachTable();
+  const icv = document.getElementById("interior") as HTMLCanvasElement | null;
+  if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4);
   document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
