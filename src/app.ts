@@ -894,7 +894,7 @@ function render() {
   if (document.getElementById("room")) attachRoom();
   if (document.getElementById("table")) attachTable();
   const icv = document.getElementById("interior") as HTMLCanvasElement | null;
-  if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4);
+  if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4, st.s.logs.filter((l) => !l.deleted && l.action === "finish-book").length);
   document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {

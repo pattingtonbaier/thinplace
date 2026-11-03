@@ -150,6 +150,25 @@ function stoneFieldFront() {
 const TOWER = { w: 820, h: 1000, x0: 232, x1: 588, wall: 30 };
 const FLOORS = { cellar: [826, 962], library: [650, 812], subject: [480, 636], lantern: [334, 466] } as const;
 const TOWER_ROOMS = ["the Hedge Library", "a subject floor", "the Whispering Well"];
+// The twenty letters, in their four groups: strokes below the stem, above it, across it slantwise, and notches on it.
+type Og = { name: string; side: "below" | "above" | "across" | "notch"; n: number };
+const OGHAM: Og[] = [
+  ["beith", "below", 1], ["luis", "below", 2], ["fearn", "below", 3], ["sail", "below", 4], ["nion", "below", 5],
+  ["uath", "above", 1], ["dair", "above", 2], ["tinne", "above", 3], ["coll", "above", 4], ["ceirt", "above", 5],
+  ["muin", "across", 1], ["gort", "across", 2], ["ngéadal", "across", 3], ["straif", "across", 4], ["ruis", "across", 5],
+  ["ailm", "notch", 1], ["onn", "notch", 2], ["úr", "notch", 3], ["eadhadh", "notch", 4], ["iodhadh", "notch", 5],
+].map(([name, side, n]) => ({ name, side, n } as Og));
+function oghamMark(x: number, y: number, o: Og): number {
+  for (let k = 0; k < o.n; k++) {
+    const xx = x + k * 4;
+    if (o.side === "below") line([[xx, y], [xx, y + 8]], 2.2, "#f1e8d4");
+    else if (o.side === "above") line([[xx, y - 8], [xx, y]], 2.2, "#f1e8d4");
+    else if (o.side === "across") line([[xx - 3, y + 8], [xx + 3, y - 8]], 2.2, "#f1e8d4");
+    else ell(xx, y, 2.2, 2.2, "#f1e8d4");
+  }
+  return (o.n - 1) * 4 + 2;
+}
+let extra = { finished: 0 }, ringAt = 0, lastFinished = -1;
 function rect2(x0: number, y0: number, x1: number, y1: number): Pt[] { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
 function books(x0: number, x1: number, y: number, seed: number) {
   let x = x0, k = 0;
@@ -181,6 +200,8 @@ function towerStill(rooms: Rooms) {
     clipTo(Wl, () => { for (let y = 330; y < 962; y += 14) { const off = ((y / 14) % 2) * 9; for (let x = a - 20 + off; x < b; x += 18) poly(rect2(x, y + 1, x + 16, y + 12), h2(x, y) < 0.3 ? "#a8a39b" : null, 0.9, "#6d6862"); } });
     poly(Wl, null, 2.8);
   }
+  // the bell chamber's windows: four, one to each quarter (the front one is cut away with the wall)
+  for (const [a, b] of [[x0, ix0], [ix1, x1]]) { const Wn: Pt[] = [[a, 432], [a, 382], [(a + b) / 2, 368], [b, 382], [b, 432]]; poly(Wn, "#f4f2ed", 2.2); }
   // timber floors
   for (const y of [FLOORS.library[1], FLOORS.subject[1], FLOORS.lantern[1], 330]) {
     const F = rect2(ix0, y, ix1, y + 14); poly(F, "#a8977a", 2.2); for (let x = ix0 + 30; x < ix1; x += 46) line([[x, y + 2], [x, y + 12]], 1, "#6f6252");
@@ -261,13 +282,35 @@ function towerThings(rooms: Rooms, t: number): { depth: number; draw: () => void
     const hx = ix0 + 30, hy = fy - 120; poly([[hx, hy], [hx + 50, hy - 18], [hx + 50, hy + 18]], "#c9b48c", 1.8); line([[hx, hy], [hx - 12, hy + 26]], 2.2, "#8d7a62");
     for (let k = 0; k < 3; k++) { const ph = (t * 0.6 + k / 3) % 1; c.globalAlpha = 1 - ph; c.beginPath(); c.arc(hx + 54, hy, 8 + ph * 26, -0.6, 0.6); c.strokeStyle = "#8d887f"; c.lineWidth = 1.2; c.stroke(); c.globalAlpha = 1; }
   } });
-  // the lantern room: lit when every floor below is made
+  // the bell chamber: built once every floor below is made. A bronze bell hangs from an oak beam,
+  // and each book you finish cuts the next Ogham letter into the beam and rings the bell.
   out.push({ depth: 3, draw: () => {
-    const fy = FLOORS.lantern[1], all = TOWER_ROOMS.every(open);
+    const [ty, fy] = FLOORS.lantern, all = TOWER_ROOMS.every(open);
     if (!all) { for (let k = 0; k < 3; k++) poly(rect2(300 + k * 36, fy - 26 - (k % 2) * 4, 330 + k * 36, fy), "#b8a98f", 1.6); return; }
-    poly(rect2(372, fy - 10, 448, fy), "#6f6b65", 2); poly(rect2(378, fy - 92, 442, fy - 10), "rgba(247,241,223,.65)", 2.4);
-    for (const x of [394, 410, 426]) line([[x, fy - 92], [x, fy - 10]], 1.2); poly([[372, fy - 92], [410, fy - 116], [448, fy - 92]], "#3a3733", 2);
-    c.globalAlpha = 0.18; ell(410, fy - 56, 120, 70, "#d2483a"); c.globalAlpha = 1; flameAt(c, 410, fy - 24, 1.1, t);
+    // the beam, end to end across the chamber, with the Ogham stem-line and the letters cut so far
+    const by = ty + 26, bx0 = ix0 - 4, bx1 = ix1 + 4;
+    poly(rect2(bx0, by - 2, bx1, by + 20), "#7d6a52", 2.2); hatch(rect2(bx0, by - 2, bx1, by + 20), 7, "#5f5040", 0.7, 0.1);
+    line([[ix0 + 14, by + 9], [ix1 - 14, by + 9]], 1.6, "#e3d6bb");
+    let x = ix0 + 22; const n = Math.min(extra.finished, OGHAM.length * 2);
+    for (let k = 0; k < n; k++) { const w = oghamMark(x, by + 9, OGHAM[k % OGHAM.length]); x += w + 7; if (x > ix1 - 30) break; }
+    // the bell and its rope, swinging when it has just rung
+    const since = (performance.now() - ringAt) / 1000, swing = ringAt && since < 4 ? Math.sin(since * 7) * 0.45 * (1 - since / 4) : 0;
+    const px = 410, py = by + 18;
+    c.save(); c.translate(px, py); c.rotate(swing);
+    line([[0, 0], [0, 10]], 4);
+    const bell: Pt[] = [[-8, 10], [8, 10], [12, 22], [16, 46], [26, 58], [-26, 58], [-16, 46], [-12, 22]];
+    poly(bell, "#9a7f55", 2.4); hatch(bell.filter((p) => p[0] >= -2), 3, "#6a5638");
+    line([[-24, 52], [24, 52]], 1.2, "#5a4a32"); ell(0 + swing * 30, 62, 5, 5, "#5a4a32", 1.4);
+    line([[0, 58], [6, 150 - py + fy - 150]], 1.8, "#8d7a62");
+    c.restore();
+    if (ringAt && since < 2.5) for (let k = 0; k < 3; k++) { const r = 30 + ((since * 40 + k * 18) % 54); c.globalAlpha = Math.max(0, 1 - r / 84) * (1 - since / 2.5); c.beginPath(); c.arc(px, py + 34, r, -0.9, 0.9); c.arc(px, py + 34, r, Math.PI - 0.9, Math.PI + 0.9); c.strokeStyle = "#8d887f"; c.lineWidth = 1.6; c.stroke(); c.globalAlpha = 1; }
+    // a book satchel on its peg, as the scribes hung them
+    line([[ix0 + 30, fy - 96], [ix0 + 40, fy - 92]], 3);
+    line([[ix0 + 34, fy - 94], [ix0 + 22, fy - 70]], 1.4); line([[ix0 + 36, fy - 94], [ix0 + 52, fy - 70]], 1.4);
+    poly([[ix0 + 18, fy - 70], [ix0 + 58, fy - 70], [ix0 + 60, fy - 30], [ix0 + 16, fy - 30]], "#8d7a62", 2); poly([[ix0 + 18, fy - 70], [ix0 + 58, fy - 70], [ix0 + 54, fy - 54], [ix0 + 22, fy - 54]], "#6f6252", 1.6);
+    for (let k = 0; k < 4; k++) line([[ix0 + 22, fy - 42 + k * 0], [ix0 + 54, fy - 42]], 0.8, "#5a4a32");
+    // under the beam: the next letter waiting to be cut
+    if (extra.finished < OGHAM.length * 2) { const nx = OGHAM[extra.finished % OGHAM.length]; c.font = `italic 13px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "right"; c.fillText(`next: ${nx.name}`, ix1 - 14, by + 34); }
   } });
   void x1;
   return out;
@@ -298,7 +341,10 @@ export const hasScene = (id: BuildingId) => !!SCENES[id];
 export const sceneRooms = (id: BuildingId) => SCENES[id]?.spots.map((s) => s.room) ?? [];
 
 let raf = 0;
-export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Rooms, selected: number, look: GuiserOpts, onTap: (i: number) => void, labels: boolean) {
+export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Rooms, selected: number, look: GuiserOpts, onTap: (i: number) => void, labels: boolean, finished = 0) {
+  // a newly finished book rings the bell
+  if (lastFinished >= 0 && finished > lastFinished) ringAt = performance.now();
+  lastFinished = finished; extra = { finished };
   cancelAnimationFrame(raf);
   const sc = SCENES[id]; if (!sc) return;
   const DPR = Math.min(2, devicePixelRatio || 1), ctx = cv.getContext("2d")!;
