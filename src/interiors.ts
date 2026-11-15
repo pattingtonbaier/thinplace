@@ -169,7 +169,7 @@ function oghamMark(x: number, y: number, o: Og): number {
   }
   return (o.n - 1) * 4 + 2;
 }
-let extra = { finished: 0, shipped: 0 }, ringAt = 0, lastFinished = -1;
+let extra = { finished: 0, shipped: 0, poems: 0 }, ringAt = 0, lastFinished = -1;
 function rect2(x0: number, y0: number, x1: number, y1: number): Pt[] { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
 function books(x0: number, x1: number, y: number, seed: number) {
   let x = x0, k = 0;
@@ -584,6 +584,117 @@ function craftThings(rooms: Rooms, t: number): { depth: number; draw: () => void
 const craftBand = (i: number): [number, number, number, number] =>
   i === 0 ? [CH.x0, CH.apex, CH.x1, CH.fl] : i === 1 ? [CH.mid - 90, 0, CH.mid + 90, CH.apex - 6] : i === 2 ? [CH.x0, CH.fl + 16, CH.mid, CH.gy] : [CH.mid, CH.fl + 16, CH.x1, CH.gy];
 
+// ---------- Bards' Lane: the Shadow Theatre's hall, the Song Cellar below it, and the lamp posts down the lane ----------
+const BL = { w: 820, h: 740, gy: 560, x0: 300, x1: 600, wall: 24, cf: 704, eave: 300, apex: 176 };
+const BARD_SPOTS: Spot[] = [
+  { room: "the lamp posts", at: [0, 0], hot: [0, 0], name: "the lamp posts" },
+  { room: "the Song Cellar", at: [0, 0], hot: [0, 0], name: "the Song Cellar" },
+  { room: "the Shadow Theatre", at: [0, 0], hot: [0, 0], name: "the Shadow Theatre" },
+];
+const LAMPS = [70, 150, 230, 670, 750];
+function bardsStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { gy, x0, x1, wall, cf, eave, apex } = BL, ix0 = x0 + wall, ix1 = x1 - wall, rx = (x0 + x1) / 2;
+  c.fillStyle = "#cfcac2"; c.fillRect(0, 0, BL.w, BL.h);
+  for (let k = 0; k < 1000; k++) { c.fillStyle = "rgba(30,28,26,.06)"; c.fillRect(h2(k, 1) * BL.w, h2(k, 2) * BL.h, 1.4, 1.4); }
+  // the lane: cobbles along the top of the ground, and the earth cut through below
+  poly([[0, gy], [820, gy], [820, 740], [0, 740]], "#bdb7ac", 2.4); hatch([[0, gy + 14], [820, gy + 14], [820, 740], [0, 740]], 6, "#8d887f");
+  for (let x = 4; x < 820; x += 18) { if (x > x0 - 6 && x < x1 + 6) continue; ell(x + (h2(x, 1) - 0.5) * 4, gy + 6, 8, 5, "#d6d1c8", 1.2); }
+  // inside the hall, and the cellar dug below it
+  poly(rect2(ix0, eave, ix1, gy), "#e6e1d7", 0); poly([[ix0, eave], [rx, apex + 28], [ix1, eave]], "#e9e5dc", 0);
+  poly(rect2(ix0, gy + 16, ix1, cf), "#d9d3c8", 0);
+  // the cellar's brick vault
+  if (open("the Song Cellar")) {
+    const V: Pt[] = [[ix0, gy + 16], [ix1, gy + 16], [ix1, gy + 46]]; void V;
+    c.save(); c.beginPath(); c.rect(ix0, gy + 16, ix1 - ix0, cf - gy - 16); c.clip();
+    for (let r = 0; r < 8; r++) for (let q = 0; q < 14; q++) { const y = gy + 20 + r * 14, x = ix0 + q * 22 + (r % 2) * 11; poly(rect2(x, y, x + 20, y + 12), h2(r, q) < 0.25 ? "#c4b29e" : "#cfc0ad", 0.8, "#8d7a62"); }
+    c.restore();
+    c.beginPath(); c.moveTo(ix0, gy + 70); c.quadraticCurveTo(rx, gy + 6, ix1, gy + 70); c.lineTo(ix1, gy + 16); c.lineTo(ix0, gy + 16); c.closePath(); c.fillStyle = "#b8a08a"; c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+  } else chalkAt(rx, cf - 12);
+  // the walls, down into the cellar
+  coursed(rect2(x0, eave, ix0, cf + 6), x0, ix0, eave, cf + 6); coursed(rect2(ix1, eave, x1, cf + 6), ix1, x1, eave, cf + 6);
+  poly(rect2(ix0, gy, ix1, gy + 16), "#a8977a", 2.2); poly(rect2(ix0, cf, ix1, cf + 8), "#9d988f", 2);
+  // a trap-door stair from the hall down to the cellar
+  for (let k = 0; k < 7; k++) { const y = gy + 16 + k * ((cf - gy - 16) / 7), x = ix1 - 70 + k * 8; poly(rect2(x, y, ix1, y + (cf - gy - 16) / 7), k % 2 ? "#cfcac2" : "#d9d5ce", 1.1); }
+  poly(rect2(ix1 - 74, gy, ix1, gy + 16), "#e6e1d7", 1);
+  // the roof
+  const roof: Pt[] = [[x0 - 30, eave + 4], [rx, apex - 18], [x1 + 30, eave + 4], [x1 + 4, eave + 30], [rx, apex + 26], [x0 - 4, eave + 30]];
+  poly(roof, "#77736d", 2.6); clipTo(roof, () => { for (let y = apex - 20; y < eave + 34; y += 9) line([[0, y], [820, y]], 1, "#4c4945"); for (let y = apex - 20; y < eave + 34; y += 9) for (let x = (y / 9) % 2 ? 0 : 8; x < 820; x += 16) line([[x, y], [x, y + 9]], 0.8, "#4c4945"); }); poly(roof, null, 2.6);
+  // a round window high in the gable
+  ell(rx, apex + 74, 20, 20, "#f4f2ed", 2.2); line([[rx - 20, apex + 74], [rx + 20, apex + 74]], 1.4); line([[rx, apex + 54], [rx, apex + 94]], 1.4);
+  if (!open("the Shadow Theatre")) chalkAt(rx, gy - 12);
+  if (!open("the lamp posts")) chalkAt(150, gy - 8);
+}
+function bardsThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], { gy, x0, wall, cf } = BL, ix0 = x0 + wall, ix1 = BL.x1 - wall, rx = (x0 + BL.x1) / 2;
+  // the lamp posts: one lit, with its poem hung below, for each poem written
+  if (open("the lamp posts")) out.push({ depth: 1, draw: () => {
+    LAMPS.forEach((lx, k) => {
+      const lit = k < extra.poems;
+      line([[lx, gy], [lx, gy - 150]], 4); poly(rect2(lx - 8, gy - 8, lx + 8, gy), "#6f6b65", 1.6);
+      line([[lx, gy - 150], [lx + 18, gy - 150]], 3); line([[lx + 18, gy - 150], [lx + 18, gy - 142]], 1.6);
+      const L: Pt[] = [[lx + 10, gy - 142], [lx + 26, gy - 142], [lx + 24, gy - 118], [lx + 12, gy - 118]];
+      if (lit) { c.globalAlpha = 0.16; ell(lx + 18, gy - 130, 40, 34, "#d2483a"); c.globalAlpha = 1; }
+      poly(L, lit ? "rgba(247,241,223,.95)" : "rgba(225,230,229,.5)", 1.8); poly([[lx + 8, gy - 142], [lx + 18, gy - 152], [lx + 28, gy - 142]], "#3a3733", 1.4);
+      if (lit) { flameAt(c, lx + 18, gy - 122, 0.3, t + k);
+        // the poem, on a page tied to the post
+        const sway = Math.sin(t * 1.2 + k) * 2;
+        line([[lx, gy - 96], [lx + 6 + sway, gy - 90]], 1);
+        poly(rect2(lx + 2 + sway, gy - 90, lx + 26 + sway, gy - 58), "#efe8da", 1.4); for (let q = 0; q < 4; q++) line([[lx + 6 + sway, gy - 82 + q * 6], [lx + 22 + sway - (q % 2) * 6, gy - 82 + q * 6]], 0.8, "#5f5b55"); }
+    });
+    if (!extra.poems) { c.font = `italic 13px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.fillText("a lamp is lit for each poem", 150, gy - 170); }
+  } });
+  // the Song Cellar: a harp, a fiddle and a bodhrán, a gramophone and a crate of records, a barrel with a candle
+  if (open("the Song Cellar")) out.push({ depth: 1, draw: () => {
+    const fy = cf;
+    // the harp
+    const hx = ix0 + 30;
+    c.lineWidth = 4; c.strokeStyle = "#6f6252"; c.beginPath(); c.moveTo(hx, fy - 4); c.lineTo(hx, fy - 100); c.quadraticCurveTo(hx + 30, fy - 112, hx + 58, fy - 92); c.lineTo(hx + 10, fy - 6); c.stroke();
+    for (let k = 1; k < 8; k++) { const x = hx + k * 6; line([[x, fy - 100 + k * 1.5], [x, fy - 10 - k * 9]], 0.8, "#8d887f"); }
+    // the fiddle and bow on the wall, and the bodhrán
+    const fx = ix0 + 112, fyy = gy + 92;
+    poly([[fx, fyy - 26], [fx + 8, fyy - 22], [fx + 6, fyy - 10], [fx + 10, fyy + 2], [fx + 4, fyy + 14], [fx - 4, fyy + 14], [fx - 10, fyy + 2], [fx - 6, fyy - 10], [fx - 8, fyy - 22]], "#8d6a48", 1.6);
+    line([[fx, fyy - 26], [fx, fyy - 46]], 2.4, "#3a3733"); line([[fx + 18, fyy - 40], [fx + 6, fyy + 18]], 1.4);
+    ell(ix0 + 220, fyy - 6, 18, 18, "#e3d9c6", 2); ell(ix0 + 220, fyy - 6, 14, 14, null, 1); line([[ix0 + 210, fyy + 14], [ix0 + 232, fyy + 22]], 2);
+    // the gramophone on a crate of records
+    const gx = ix0 + 168, gb = fy;
+    poly(rect2(gx - 26, gb - 32, gx + 26, gb), "#a8977a", 2); for (let k = 0; k < 6; k++) line([[gx - 22 + k * 8, gb - 30], [gx - 22 + k * 8, gb - 4]], 2.2, "#3a3733");
+    poly(rect2(gx - 20, gb - 52, gx + 20, gb - 32), "#6f6252", 1.8); ell(gx, gb - 54, 18, 4, "#2a2724", 1.4);
+    c.lineWidth = 2; c.strokeStyle = INK; c.beginPath(); c.moveTo(gx + 10, gb - 54); c.quadraticCurveTo(gx + 16, gb - 80, gx + 40, gb - 96); c.stroke();
+    poly([[gx + 34, gb - 92], [gx + 50, gb - 118], [gx + 66, gb - 102], [gx + 44, gb - 88]], "#c9b48c", 1.8);
+
+    // a tune rising
+    for (let k = 0; k < 3; k++) { const ph = (t * 0.35 + k / 3) % 1, nx = gx + 60 + Math.sin(ph * 6 + k) * 10, ny = gb - 110 - ph * 60; c.globalAlpha = 1 - ph; ell(nx, ny, 3.4, 2.6, "#3a3733"); line([[nx + 3, ny], [nx + 3, ny - 14]], 1.2); c.globalAlpha = 1; }
+  } });
+  // the Shadow Theatre: a paper screen lit from behind, puppets on rods, benches facing it, curtains tied back
+  if (open("the Shadow Theatre")) out.push({ depth: 1, draw: () => {
+    const sx0 = ix0 + 40, sx1 = ix1 - 40, sy0 = BL.eave + 20, sy1 = gy - 110;
+    c.globalAlpha = 0.25; ell(rx, (sy0 + sy1) / 2, 140, 90, "#f7e6c6"); c.globalAlpha = 1;
+    poly(rect2(sx0 - 8, sy0 - 8, sx1 + 8, sy1 + 8), "#6f6252", 2.4); poly(rect2(sx0, sy0, sx1, sy1), "#f6ecd6", 2);
+    c.save(); c.beginPath(); c.rect(sx0, sy0, sx1 - sx0, sy1 - sy0); c.clip();
+    const drift = Math.sin(t * 0.5) * 30;
+    // a hare and a stag, cut from card, crossing the screen
+    const hx = rx - 74 + drift, hy = sy1 - 30;
+    c.fillStyle = "#2a2724"; c.beginPath(); c.ellipse(hx, hy, 18, 10, 0, 0, Math.PI * 2); c.fill(); c.beginPath(); c.ellipse(hx + 16, hy - 8, 7, 6, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.moveTo(hx + 14, hy - 12); c.lineTo(hx + 12, hy - 32); c.lineTo(hx + 17, hy - 13); c.moveTo(hx + 18, hy - 12); c.lineTo(hx + 22, hy - 30); c.lineTo(hx + 21, hy - 12); c.fill();
+    line([[hx, hy + 10], [hx - 4, sy1 + 10]], 1.4, "#2a2724");
+    const dx = rx + 58 + drift, dy = sy1 - 40;
+    c.beginPath(); c.ellipse(dx, dy, 22, 11, 0, 0, Math.PI * 2); c.fill(); c.beginPath(); c.moveTo(dx - 18, dy); c.lineTo(dx - 26, dy - 22); c.lineTo(dx - 20, dy - 24); c.lineTo(dx - 12, dy - 6); c.fill();
+    for (const lx of [dx - 14, dx - 6, dx + 8, dx + 16]) { c.fillRect(lx, dy + 6, 3, 16); }
+    line([[dx - 24, dy - 22], [dx - 34, dy - 40]], 1.6, "#2a2724"); line([[dx - 30, dy - 33], [dx - 38, dy - 34]], 1.6, "#2a2724"); line([[dx - 24, dy - 22], [dx - 16, dy - 42]], 1.6, "#2a2724");
+    line([[dx, dy + 10], [dx + 6, sy1 + 10]], 1.4, "#2a2724");
+    c.restore();
+    // curtains, tied back with red cord
+    for (const [cx, dir] of [[sx0 - 8, 1], [sx1 + 8, -1]] as [number, number][]) {
+      const C2: Pt[] = [[cx, sy0 - 12], [cx + dir * 28, sy0 - 12], [cx + dir * 8, sy0 + 70], [cx + dir * 22, sy1 + 30], [cx, sy1 + 30]];
+      poly(C2, "#5f5b55", 2); hatch(C2, 4, "#3d3934"); line([[cx + dir * 4, sy0 + 70], [cx + dir * 14, sy0 + 74]], 3, "#d2483a");
+    }
+    // benches, in rows, facing the screen
+    for (let r = 0; r < 2; r++) { const by = gy - 18 - r * 26, bx0 = ix0 + 24 + r * 20, bx1 = ix1 - 90 - r * 20; poly(rect2(bx0, by - 8, bx1, by), "#8d7a62", 1.8); for (const x of [bx0 + 8, (bx0 + bx1) / 2, bx1 - 8]) line([[x, by], [x, by + 16 - r * 4]], 2.4, "#6f6252"); }
+  } });
+  return out;
+}
+const bardsBand = (i: number): [number, number, number, number] => i === 0 ? [0, BL.gy - 200, BL.w, BL.gy + 14] : i === 1 ? [BL.x0, BL.gy + 14, BL.x1, BL.cf + 10] : [BL.x0, BL.apex - 20, BL.x1, BL.gy];
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -606,6 +717,12 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     stand: (i) => i === 0 ? [CH.x0 + 270, CH.fl, 0.6] : i === 1 ? [(CH.x0 + CH.x1) / 2 + 46, CH.apex + 4, 0.45] : i === 2 ? [CH.x0 + 150, CH.gy, 0.6] : [CH.mid + 150, CH.gy, 0.6],
     labelAt: (i) => i === 0 ? [CH.x0 + 330, CH.eave + 14] : i === 1 ? [(CH.x0 + CH.x1) / 2 + 150, 40] : i === 2 ? [CH.x0 + 110, CH.fl + 46] : [CH.mid + 110, CH.fl + 46],
   },
+  "bards-lane": {
+    spots: BARD_SPOTS, still: bardsStill, things: bardsThings, front: () => {}, size: [BL.w, BL.h],
+    hit: (x, y) => ([2, 1].find((i) => { const [a, b, c2, d] = bardsBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? ((y >= BL.gy - 200 && y <= BL.gy + 14) ? 0 : -1)),
+    stand: (i) => i === 0 ? [190, BL.gy, 0.6] : i === 1 ? [BL.x0 + 118, BL.cf, 0.55] : [BL.x1 - 90, BL.gy, 0.6],
+    labelAt: (i) => i === 0 ? [150, BL.gy - 200] : i === 1 ? [(BL.x0 + BL.x1) / 2 + 40, BL.gy + 34] : [(BL.x0 + BL.x1) / 2, BL.eave - 4],
+  },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],
     hit: (x, y) => (x < TOWER.x0 - 40 || x > TOWER.x1 + 40 ? -1 : [0, 1, 2].find((i) => { const [a, b] = towerBand(i); return y >= a - 10 && y <= b + 10; }) ?? -1),
@@ -617,7 +734,7 @@ export const hasScene = (id: BuildingId) => !!SCENES[id];
 export const sceneRooms = (id: BuildingId) => SCENES[id]?.spots.map((s) => s.room) ?? [];
 
 let raf = 0;
-export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Rooms, selected: number, look: GuiserOpts, onTap: (i: number) => void, labels: boolean, counts: { finished: number; shipped: number } = { finished: 0, shipped: 0 }) {
+export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Rooms, selected: number, look: GuiserOpts, onTap: (i: number) => void, labels: boolean, counts: { finished: number; shipped: number; poems: number } = { finished: 0, shipped: 0, poems: 0 }) {
   const finished = counts.finished;
   // a newly finished book rings the bell
   if (lastFinished >= 0 && finished > lastFinished) ringAt = performance.now();
