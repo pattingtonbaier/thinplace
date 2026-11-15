@@ -174,7 +174,7 @@ function forgeStill(rooms: Rooms) {
   const WL: Pt[] = [P(-A, A, 0), P(-A, -A, 0), P(-A, -A, FWH), P(-A, A, FWH)];
   const WR: Pt[] = [P(-A, -A, 0), P(A, -A, 0), P(A, -A, FWH), P(-A, -A, FWH)];
   forgeWall(WL, "#d6d1c8"); forgeWall(WR, "#bdb8b0", true);
-  for (const [wall, x, y, z] of [["L", -A, 1.8, 120], ["L", -A, 0.4, 30], ["R", -1.8, -A, 140], ["R", 2.4, -A, 40]] as [string, number, number, number][])
+  for (const [wall, x, y, z] of [["L", -A, 1.8, 120], ["L", -A, 0.4, 30], ["R", -0.45, -A, 150], ["R", 2.4, -A, 40]] as [string, number, number, number][])
     for (let k = 0; k < 6; k++) { const du = (k % 3) * 0.28 - 0.3, dz = Math.floor(k / 3) * 14; const q = wall === "L" ? [P(x, y + du, z + dz), P(x, y + du + 0.25, z + dz), P(x, y + du + 0.25, z + dz + 12), P(x, y + du, z + dz + 12)] : [P(x + du, y, z + dz), P(x + du + 0.25, y, z + dz), P(x + du + 0.25, y, z + dz + 12), P(x + du, y, z + dz + 12)]; poly(q as Pt[], wall === "L" ? "#cdc8bf" : "#aaa59d", 1.1, "#6d6862"); }
   // soot above the hearth
   clipTo(WR, () => { const sg = c.createRadialGradient(...P(1.1, -A, 170), 10, ...P(1.1, -A, 170), 150); sg.addColorStop(0, "rgba(40,36,32,.45)"); sg.addColorStop(1, "rgba(40,36,32,0)"); c.fillStyle = sg; c.fillRect(0, 0, VW, VH); });
@@ -201,9 +201,18 @@ function forgeStill(rooms: Rooms) {
   { const cx0 = 0.85, cx1 = 1.35; poly([P(cx0, -A, FWH), P(cx1, -A, FWH), P(cx1, -A, FWH + 70), P(cx0, -A, FWH + 70)], "#bdb8b0", 2.4); poly([P(cx0 - 0.05, -A, FWH + 70), P(cx1 + 0.05, -A, FWH + 70), P(cx1 + 0.05, -A, FWH + 78), P(cx0 - 0.05, -A, FWH + 78)], "#9d988f", 2); }
   // the Guild room's timber screen, and the charter on the wall behind it
   if (open("the Guild room")) {
-    const sx = -1.25;
-    for (let y = -A; y < -1.15; y += 0.3) poly([P(sx, y, 0), P(sx, y + 0.28, 0), P(sx, y + 0.28, 110), P(sx, y, 110)], "#a8977a", 1.4);
-    line([P(sx, -A, 110), P(sx, -1.15, 110)], 4); line([P(sx, -1.15, 0), P(sx, -1.15, 120)], 4);
+    // a half-height screen of boards with an open lattice above, so the room stays in view
+    const sx = -1.25, y0 = -A + 0.02, y1 = -1.2, low = 54, top = 116, t2 = 0.07;
+    const face: Pt[] = [P(sx, y1, 0), P(sx, y0, 0), P(sx, y0, low), P(sx, y1, low)];
+    poly(face, "#a8977a", 2.2);
+    for (let y = y0 + 0.24; y < y1 - 0.05; y += 0.24) line([P(sx, y, 2), P(sx, y, low - 2)], 1, "#6f6252");
+    poly([P(sx - t2, y0, low), P(sx + t2, y0, low), P(sx + t2, y1, low), P(sx - t2, y1, low)], "#c2b394", 1.8); // the cap rail
+    poly([P(sx, y1, 0), P(sx - t2 * 2, y1, 0), P(sx - t2 * 2, y1, low), P(sx, y1, low)], "#8d7a62", 1.6); // the end of the boards
+    clipTo([P(sx, y1, low), P(sx, y0, low), P(sx, y0, top), P(sx, y1, top)], () => {
+      for (let u = -2; u < 3; u += 0.32) { line([P(sx, y0 + u, low), P(sx, y0 + u + 0.8, top)], 1.6, "#8d7a62"); line([P(sx, y0 + u + 0.8, low), P(sx, y0 + u, top)], 1.6, "#8d7a62"); }
+    });
+    for (const y of [y0 + 0.04, (y0 + y1) / 2, y1]) poly([P(sx - 0.04, y, 0), P(sx + 0.04, y, 0), P(sx + 0.04, y, top + 4), P(sx - 0.04, y, top + 4)], "#8d7a62", 1.6);
+    line([P(sx, y0, top), P(sx, y1, top)], 5, INK); line([P(sx, y0, top), P(sx, y1, top)], 2.6, "#a8977a");
     const Ch: Pt[] = [P(-2.6, -A, 110), P(-1.7, -A, 110), P(-1.7, -A, 160), P(-2.6, -A, 160)]; poly(Ch, "#efe8da", 1.8);
     clipTo(Ch, () => { const [cx, cy] = P(-2.15, -A, 140); for (let k = 0; k < 4; k++) line([[cx - 30, cy - 6 + k * 7 + 12], [cx + 22, cy - 18 + k * 7 + 12]], 1, "#5f5b55"); });
     const [sx2, sy2] = P(-2.0, -A, 116); ell(sx2, sy2, 6, 6, "#d2483a", 1.2);
