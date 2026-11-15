@@ -145,164 +145,6 @@ function stoneFieldFront() {
 }
 
 
-// ---------- the Forge: a smithy with the front walls cut away ----------
-// Projects at the hearth and anvil, the Guild room behind a timber screen, Repairs by the door.
-// Every project you ship hangs a forged piece on the wall of work.
-const FORGE: Spot[] = [
-  { room: "Projects", at: [0.55, -0.35], hot: [1.1, -2.2], name: "Projects" },
-  { room: "the Guild room", at: [-2.0, -1.45], hot: [-2.4, -2.2], name: "the Guild room" },
-  { room: "Repairs", at: [-1.35, 1.25], hot: [-2.2, 1.6], name: "Repairs" },
-];
-const FWH = 190; // wall height
-function forgeWall(F: Pt[], fill: string, shade = false) {
-  poly(F, fill, 0); if (shade) hatch(F, 6, "#a39e96", 0.9);
-  poly(F, null, 2.6);
-}
-function forgeStill(rooms: Rooms) {
-  const open = (r: string) => r in rooms;
-  c.fillStyle = "#d4cfc7"; c.fillRect(0, 0, VW, VH);
-  for (let k = 0; k < 900; k++) { c.fillStyle = "rgba(30,28,26,.06)"; c.fillRect(h2(k, 1) * VW, h2(k, 2) * VH, 1.4, 1.4); }
-  const d = 26;
-  poly([P(-A, A), P(A, A), [P(A, A)[0], P(A, A)[1] + d], [P(-A, A)[0], P(-A, A)[1] + d]], "#cfcac2", 2.4);
-  const Rs: Pt[] = [P(A, A), P(A, -A), [P(A, -A)[0], P(A, -A)[1] + d], [P(A, A)[0], P(A, A)[1] + d]]; poly(Rs, "#9d988f", 2.4); hatch(Rs, 4, "#6d6862");
-  // a floor of beaten earth, darker by the hearth, scattered with scale
-  poly([P(-A, -A), P(A, -A), P(A, A), P(-A, A)], "#d6d0c4", 2.6);
-  for (let k = 0; k < 160; k++) { const [x, y] = P(-A + h2(k, 3) * 6, -A + h2(k, 4) * 6); ell(x, y, 1.6 + h2(k, 5) * 2, 0.9 + h2(k, 6), "#a8a196"); }
-  const g = c.createRadialGradient(...P(1.1, -1.6), 10, ...P(1.1, -1.6), 260); g.addColorStop(0, "rgba(210,72,58,.18)"); g.addColorStop(1, "rgba(210,72,58,0)");
-  clipTo([P(-A, -A), P(A, -A), P(A, A), P(-A, A)], () => { c.fillStyle = g; c.fillRect(0, 0, VW, VH); });
-  // the far walls: rough stone, soot-dark toward the hearth
-  const WL: Pt[] = [P(-A, A, 0), P(-A, -A, 0), P(-A, -A, FWH), P(-A, A, FWH)];
-  const WR: Pt[] = [P(-A, -A, 0), P(A, -A, 0), P(A, -A, FWH), P(-A, -A, FWH)];
-  forgeWall(WL, "#d6d1c8"); forgeWall(WR, "#bdb8b0", true);
-  for (const [wall, x, y, z] of [["L", -A, 1.8, 120], ["L", -A, 0.4, 30], ["R", -0.45, -A, 150], ["R", 2.4, -A, 40]] as [string, number, number, number][])
-    for (let k = 0; k < 6; k++) { const du = (k % 3) * 0.28 - 0.3, dz = Math.floor(k / 3) * 14; const q = wall === "L" ? [P(x, y + du, z + dz), P(x, y + du + 0.25, z + dz), P(x, y + du + 0.25, z + dz + 12), P(x, y + du, z + dz + 12)] : [P(x + du, y, z + dz), P(x + du + 0.25, y, z + dz), P(x + du + 0.25, y, z + dz + 12), P(x + du, y, z + dz + 12)]; poly(q as Pt[], wall === "L" ? "#cdc8bf" : "#aaa59d", 1.1, "#6d6862"); }
-  // soot above the hearth
-  clipTo(WR, () => { const sg = c.createRadialGradient(...P(1.1, -A, 170), 10, ...P(1.1, -A, 170), 150); sg.addColorStop(0, "rgba(40,36,32,.45)"); sg.addColorStop(1, "rgba(40,36,32,0)"); c.fillStyle = sg; c.fillRect(0, 0, VW, VH); });
-  // a window in the left wall, and the wall of work beside it: one forged piece for each project shipped
-  { const y0 = 0.9, y1 = 1.9, z0 = 76, z1 = 132, O: Pt[] = [P(-A, y0, z0), P(-A, y1, z0), P(-A, y1, z1), P(-A, y0, z1)]; poly(O, "#f4f2ed", 2.4); line([P(-A, (y0 + y1) / 2, z0), P(-A, (y0 + y1) / 2, z1)], 2); }
-  // the hearth: a raised stone bed under a hood that narrows into the chimney
-  { const x0 = 0.35, x1 = 1.85, y0 = -A, y1 = -2.15, z = 44;
-    const Fy: Pt[] = [P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, z), P(x0, y1, z)], Fx: Pt[] = [P(x1, y1, 0), P(x1, y0, 0), P(x1, y0, z), P(x1, y1, z)];
-    poly(Fy, "#cfcac2", 2.4); poly(Fx, "#a8a39b", 2.4); hatch(Fx, 3.6, "#7d7871");
-    for (let r = 0; r < 3; r++) for (let q = 0; q < 5; q++) { const u0 = x0 + 0.05 + q * 0.3 + (r % 2) * 0.15; if (u0 > x1 - 0.25) continue; poly([P(u0, y1, r * 14 + 2), P(u0 + 0.26, y1, r * 14 + 2), P(u0 + 0.26, y1, r * 14 + 13), P(u0, y1, r * 14 + 13)], null, 0.9, "#6d6862"); }
-    const T: Pt[] = [P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)]; poly(T, "#5f5b55", 2.4);
-    for (let k = 0; k < 14; k++) { const [cx, cy] = P(x0 + 0.2 + h2(k, 1) * 1.1, y0 + 0.15 + h2(k, 2) * 0.6, z); ell(cx, cy, 5, 3, h2(k, 3) < 0.4 ? "#8d887f" : "#3a3733", 0.8); }
-    // the hood: a sooty canopy over the fire, narrowing up the wall into the chimney
-    const hy = -2.3, hz0 = 118, hz1 = 150, cx0 = 0.85, cx1 = 1.35;
-    const Hf: Pt[] = [P(x0, hy, hz0), P(x1, hy, hz0), P(x1, hy, hz1 - 6), P(cx1, -A + 0.2, FWH), P(cx0, -A + 0.2, FWH), P(x0, hy, hz1 - 6)];
-    const Hs: Pt[] = [P(x1, hy, hz0), P(x1, -A, hz0), P(x1, -A, hz1), P(x1, hy, hz1 - 6)];
-    void Hs; poly(Hf, "#9d988f", 2.4); hatch(Hf, 5, "#6d6862"); line([P(x0 - 0.04, hy, hz0), P(x1 + 0.04, hy, hz0)], 4);
-  }
-  // the thatch, cut through along the tops of the walls
-  for (const T of [[P(-A, A, FWH), P(-A, -A, FWH), P(-A, -A, FWH + 28), P(-A, A, FWH + 28)], [P(-A, -A, FWH), P(A, -A, FWH), P(A, -A, FWH + 28), P(-A, -A, FWH + 28)]] as Pt[][]) {
-    poly(T, "#d7d0c1", 2.4); clipTo(T, () => { for (let k = 0; k < 150; k++) { const u = h2(k, 3); const a = T[0][0] + (T[1][0] - T[0][0]) * u, b = T[0][1] + (T[1][1] - T[0][1]) * u; line([[a, b - 2], [a + 3, b - 24]], 0.9, "#8f897d"); } }); poly(T, null, 2.4);
-  }
-  // the chimney, up through the thatch
-  { const cx0 = 0.85, cx1 = 1.35; poly([P(cx0, -A, FWH), P(cx1, -A, FWH), P(cx1, -A, FWH + 70), P(cx0, -A, FWH + 70)], "#bdb8b0", 2.4); poly([P(cx0 - 0.05, -A, FWH + 70), P(cx1 + 0.05, -A, FWH + 70), P(cx1 + 0.05, -A, FWH + 78), P(cx0 - 0.05, -A, FWH + 78)], "#9d988f", 2); }
-  // the Guild room's timber screen, and the charter on the wall behind it
-  if (open("the Guild room")) {
-    // a half-height screen of boards with an open lattice above, so the room stays in view
-    const sx = -1.25, y0 = -A + 0.02, y1 = -1.2, low = 54, top = 116, t2 = 0.07;
-    const face: Pt[] = [P(sx, y1, 0), P(sx, y0, 0), P(sx, y0, low), P(sx, y1, low)];
-    poly(face, "#d3cec3", 2.2);
-    for (let y = y0 + 0.24; y < y1 - 0.05; y += 0.24) line([P(sx, y, 2), P(sx, y, low - 2)], 1, "#8d887f");
-    poly([P(sx - t2, y0, low), P(sx + t2, y0, low), P(sx + t2, y1, low), P(sx - t2, y1, low)], "#e6e2da", 1.8); // the cap rail
-    poly([P(sx, y1, 0), P(sx - t2 * 2, y1, 0), P(sx - t2 * 2, y1, low), P(sx, y1, low)], "#aaa59d", 1.6); // the end of the boards
-    clipTo([P(sx, y1, low), P(sx, y0, low), P(sx, y0, top), P(sx, y1, top)], () => {
-      for (let u = -2; u < 3; u += 0.32) { line([P(sx, y0 + u, low), P(sx, y0 + u + 0.8, top)], 1.6, "#6f6b65"); line([P(sx, y0 + u + 0.8, low), P(sx, y0 + u, top)], 1.6, "#6f6b65"); }
-    });
-    for (const y of [y0 + 0.04, (y0 + y1) / 2, y1]) poly([P(sx - 0.04, y, 0), P(sx + 0.04, y, 0), P(sx + 0.04, y, top + 4), P(sx - 0.04, y, top + 4)], "#6f6b65", 1.6);
-    line([P(sx, y0, top), P(sx, y1, top)], 5, INK); line([P(sx, y0, top), P(sx, y1, top)], 2.6, "#8d887f");
-    const Ch: Pt[] = [P(-2.6, -A, 110), P(-1.7, -A, 110), P(-1.7, -A, 160), P(-2.6, -A, 160)]; poly(Ch, "#efe8da", 1.8);
-    clipTo(Ch, () => { const [cx, cy] = P(-2.15, -A, 140); for (let k = 0; k < 4; k++) line([[cx - 30, cy - 6 + k * 7 + 12], [cx + 22, cy - 18 + k * 7 + 12]], 1, "#5f5b55"); });
-    const [sx2, sy2] = P(-2.0, -A, 116); ell(sx2, sy2, 6, 6, "#d2483a", 1.2);
-  } else chalk([-2.0, -1.8]);
-}
-function forgeThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
-  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [];
-  // the fire is always lit: this is a forge
-  out.push({ depth: -4, draw: () => {
-    const [fx, fy] = P(1.1, -2.6, 44); flameAt(c, fx, fy, 1.0, t);
-    for (let k = 0; k < 6; k++) { const ph = (t * 0.8 + k / 6) % 1, sx = fx + Math.sin(k * 3.1 + t) * 14 * ph, sy = fy - 24 - ph * 90; c.globalAlpha = 1 - ph; ell(sx, sy, 1.6, 1.6, "#d2483a"); c.globalAlpha = 1; }
-  } });
-  if (open("Projects")) {
-    // the bellows, worked by a lever
-    out.push({ depth: 0.1 - 2.4, draw: () => {
-      const pump = Math.sin(t * 1.6) * 6, [bx, by] = P(0.0, -2.45, 30);
-      poly([[bx - 30, by - 4 - pump * 0.5], [bx + 26, by - 10], [bx + 30, by + 2], [bx - 28, by + 12 + pump * 0.5]], "#6f6252", 2); hatch([[bx - 30, by - 4], [bx + 26, by - 10], [bx + 30, by + 2], [bx - 28, by + 12]], 4, "#4c4035");
-      line([[bx + 30, by - 4], [bx + 52, by - 10]], 3); line([[bx - 30, by + 4], [bx - 30, by + 40]], 3); line([[bx - 30, by - 4 - pump], [bx - 46, by - 40 - pump]], 3);
-    } });
-    // the anvil on its stump, with a hammer and tongs
-    out.push({ depth: 1.3 - 0.9, draw: () => {
-      const [x, y] = P(1.3, -0.9);
-      ell(x, y, 24, 9, "#6f6252", 2); poly([[x - 22, y], [x - 20, y - 34], [x + 20, y - 34], [x + 22, y]], "#8d7a62", 2.2); hatch([[x, y], [x, y - 34], [x + 20, y - 34], [x + 22, y]], 4, "#5f5040"); ell(x, y - 34, 20, 7, "#a8977a", 2);
-      const A2: Pt[] = [[x - 40, y - 52], [x + 18, y - 52], [x + 36, y - 46], [x + 18, y - 42], [x + 12, y - 36], [x - 12, y - 36], [x - 18, y - 46]];
-      poly(A2, "#3a3733", 2.4); line([[x - 38, y - 51], [x + 16, y - 51]], 1.4, "#8d887f");
-      const sw = Math.max(0, Math.sin(t * 3)) * 0.4;
-      c.save(); c.translate(x + 26, y - 56); c.rotate(-0.9 + sw); line([[0, 0], [0, -34]], 3, "#6f6252"); poly([[-8, -34], [8, -34], [8, -42], [-8, -42]], "#3a3733", 1.6); c.restore();
-      line([[x - 34, y - 10], [x - 4, y - 50]], 1.6); line([[x - 30, y - 8], [x - 2, y - 46]], 1.6);
-      if (Math.sin(t * 3) > 0.92) for (let k = 0; k < 5; k++) ell(x + 6 + k * 5, y - 58 - k * 3, 1.4, 1.4, "#d2483a");
-    } });
-    // the quench trough, steaming
-    out.push({ depth: 2.4 - 1.6, draw: () => {
-      const x0 = 2.05, x1 = 2.75, y0 = -1.95, y1 = -1.3, z = 24;
-      const F: Pt[] = [P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, z), P(x0, y1, z)], R2: Pt[] = [P(x1, y1, 0), P(x1, y0, 0), P(x1, y0, z), P(x1, y1, z)];
-      poly(F, "#cfcac2", 2.2); poly(R2, "#a8a39b", 2.2); hatch(R2, 3.4, "#7d7871");
-      poly([P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)], "#bdb8b0", 2.2); poly([P(x0 + 0.07, y0 + 0.07, z), P(x1 - 0.07, y0 + 0.07, z), P(x1 - 0.07, y1 - 0.07, z), P(x0 + 0.07, y1 - 0.07, z)], "#8d887f", 1.2);
-      for (let k = 0; k < 3; k++) { const ph = (t * 0.4 + k / 3) % 1, [sx, sy] = P(x0 + 0.2 + k * 0.18, (y0 + y1) / 2, z); c.globalAlpha = 0.8 * (1 - ph); line([[sx, sy - ph * 40], [sx + 4, sy - 12 - ph * 40], [sx, sy - 22 - ph * 40]], 1.4, "#9d988f"); c.globalAlpha = 1; }
-    } });
-  } else out.push({ depth: -9, draw: () => chalk([1.1, -0.9]) });
-  // the wall of work: a forged piece for each project shipped, hung on the left wall
-  out.push({ depth: -6, draw: () => {
-    const n = Math.min(extra.shipped, 18), pieces = ["horseshoe", "hinge", "key", "hook", "blade", "ring"];
-    line([P(-A + 0.02, -0.4, 150), P(-A + 0.02, 0.75, 150)], 4, "#6f6252");
-    for (let k = 0; k < n; k++) {
-      const row = Math.floor(k / 6), y = -0.32 + (k % 6) * 0.19, [px, py] = P(-A + 0.03, y, 146 - row * 38), kind = pieces[k % pieces.length];
-      line([[px, py - 4], [px, py + 2]], 1);
-      c.lineWidth = 3; c.strokeStyle = "#3a3733"; c.beginPath();
-      if (kind === "horseshoe") c.arc(px, py + 12, 8, Math.PI * 0.15, Math.PI * 0.85, true);
-      else if (kind === "hinge") { c.moveTo(px - 2, py + 2); c.lineTo(px - 2, py + 26); c.moveTo(px - 2, py + 6); c.lineTo(px + 8, py + 4); }
-      else if (kind === "key") { c.arc(px, py + 7, 4, 0, Math.PI * 2); c.moveTo(px, py + 11); c.lineTo(px, py + 28); c.lineTo(px + 5, py + 28); }
-      else if (kind === "hook") { c.moveTo(px, py + 2); c.lineTo(px, py + 18); c.arc(px + 5, py + 18, 5, Math.PI, 0, true); }
-      else if (kind === "blade") { c.moveTo(px, py + 2); c.lineTo(px, py + 8); c.moveTo(px - 2, py + 8); c.lineTo(px + 2, py + 8); c.lineTo(px + 1, py + 30); c.lineTo(px - 1, py + 30); c.closePath(); }
-      else c.arc(px, py + 12, 7, 0, Math.PI * 2);
-      c.stroke();
-    }
-    if (!n) { const [px, py] = P(-A + 0.03, 0.15, 128); c.font = `italic 12px 'IM Fell English', Georgia, serif`; c.fillStyle = "#7d7871"; c.textAlign = "center"; c.fillText("a piece hangs here", px, py); c.fillText("for each project shipped", px, py + 14); }
-  } });
-  // the Guild room: a long bench, an hourglass running, plans and a lamp
-  if (open("the Guild room")) out.push({ depth: -2.7 - 2.0, draw: () => {
-    const x0 = -A, x1 = -2.45, y0 = -2.8, y1 = -1.35, z = 48;
-    const Fx: Pt[] = [P(x1, y1, 0), P(x1, y0, 0), P(x1, y0, z), P(x1, y1, z)];
-    poly([P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)], "#a8977a", 2.2); poly(Fx, "#8d7a62", 2.2); hatch(Fx, 4, "#5f5040");
-    poly([P(x0 + 0.08, -2.6, z), P(x1 - 0.06, -2.6, z), P(x1 - 0.06, -2.0, z), P(x0 + 0.08, -2.0, z)], "#efe8da", 1.2);
-    const [hx, hy] = P(-2.7, -1.6, z), sand = (t * 0.05) % 1;
-    poly([[hx - 9, hy - 40], [hx + 9, hy - 40], [hx + 1.5, hy - 20], [hx + 9, hy], [hx - 9, hy], [hx - 1.5, hy - 20]], "rgba(225,230,229,.6)", 1.6);
-    poly([[hx - 7 + sand * 5, hy - 38 + sand * 16], [hx + 7 - sand * 5, hy - 38 + sand * 16], [hx, hy - 21]], "#c9b48c", 0); poly([[hx - 8 * sand, hy - 1], [hx + 8 * sand, hy - 1], [hx, hy - 1 - 14 * sand]], "#c9b48c", 0);
-    line([[hx, hy - 21], [hx, hy - 2]], 0.8, "#c9b48c");
-    line([[hx - 11, hy - 42], [hx + 11, hy - 42]], 2.4, "#6f6252"); line([[hx - 11, hy + 1], [hx + 11, hy + 1]], 2.4, "#6f6252");
-    const [lx, ly] = P(-2.75, -2.6, z); poly([[lx - 6, ly], [lx + 6, ly], [lx + 6, ly - 16], [lx - 6, ly - 16]], "rgba(247,241,223,.6)", 1.4); flameAt(c, lx, ly - 4, 0.3, t);
-    const [sx, sy] = P(-2.2, -1.7); poly([[sx - 12, sy - 26], [sx + 12, sy - 26], [sx + 12, sy - 22], [sx - 12, sy - 22]], "#a8977a", 1.6); for (const dx of [-9, 0, 9]) line([[sx + dx, sy - 22], [sx + dx * 1.2, sy]], 2);
-  } });
-  // Repairs: a mending bench with a vise, a cartwheel waiting for a spoke, a riveted kettle
-  if (open("Repairs")) out.push({ depth: -2.2 + 1.6, draw: () => {
-    const x0 = -A, x1 = -2.4, y0 = 1.95, y1 = 2.75, z = 40;
-    poly([P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)], "#a8977a", 2.2); const Fx: Pt[] = [P(x1, y1, 0), P(x1, y0, 0), P(x1, y0, z), P(x1, y1, z)]; poly(Fx, "#8d7a62", 2.2); hatch(Fx, 4, "#5f5040");
-    const [vx, vy] = P(-2.5, 2.1, z); poly([[vx - 6, vy - 16], [vx + 6, vy - 16], [vx + 6, vy], [vx - 6, vy]], "#5f5b55", 1.6); line([[vx - 12, vy - 12], [vx + 12, vy - 12]], 2);
-    const [kx, ky] = P(-2.7, 2.5, z); ell(kx, ky - 8, 10, 8, "#8d887f", 1.6); for (let k = 0; k < 4; k++) ell(kx - 6 + k * 4, ky - 8, 1, 1, "#e3dfd8");
-    const [wx, wy] = P(-2.2, 1.05, 34); c.lineWidth = 3; c.strokeStyle = INK; c.beginPath(); c.ellipse(wx, wy, 18, 34, 0.4, 0, Math.PI * 2); c.stroke();
-    c.lineWidth = 1.8; for (let k = 0; k < 8; k++) { if (k === 3) continue; const a = (k / 8) * Math.PI * 2; c.beginPath(); c.moveTo(wx, wy); c.lineTo(wx + Math.cos(a) * 16 * Math.cos(0.4) - Math.sin(a) * 32 * Math.sin(0.4), wy + Math.cos(a) * 16 * Math.sin(0.4) + Math.sin(a) * 32 * Math.cos(0.4)); c.stroke(); }
-    ell(wx, wy, 5, 5, "#8d7a62", 1.4);
-  } }); else out.push({ depth: -9, draw: () => chalk([-1.6, 1.6]) });
-  return out;
-}
-function forgeFront() {
-  const z = 22, g0 = -0.5, g1 = 0.5;
-  const seg = (a: number, b: number) => { poly([P(a, A, 0), P(b, A, 0), P(b, A, z), P(a, A, z)], "#dcd8d1", 2.2); poly([P(a, A - 0.22, z), P(b, A - 0.22, z), P(b, A, z), P(a, A, z)], "#bdb8b0", 2); };
-  seg(-A, g0); seg(g1, A);
-  const F: Pt[] = [P(A, A, 0), P(A, -A, 0), P(A, -A, z), P(A, A, z)]; poly(F, "#aaa59d", 2.2); hatch(F, 3.6, "#7d7871"); poly([P(A - 0.22, A, z), P(A - 0.22, -A, z), P(A, -A, z), P(A, A, z)], "#bdb8b0", 2);
-}
-
 // ---------- the Ogham Tower: a lighthouse cut open, a floor per room ----------
 // Front-on, like the lighthouse concept: the Whispering Well in the cellar, the Hedge Library on the ground,
 // the subject floor above, and a lantern room that lights once all three are made.
@@ -481,6 +323,150 @@ const TOWER_SPOTS: Spot[] = [
 ];
 const towerBand = (i: number): [number, number] => i === 0 ? [FLOORS.library[0], FLOORS.library[1]] : i === 1 ? [FLOORS.subject[0], FLOORS.subject[1]] : [FLOORS.cellar[0], 962];
 
+// ---------- the Forge: a smithy cut open front-on, its rooms stacked and side by side ----------
+// The smithy on the ground floor (Projects), the Guild room upstairs under the thatch, and Repairs in a
+// lean-to built against the side once you've used it. Every project you ship hangs a forged piece on the wall of work.
+const FG = { w: 820, h: 700, gy: 600, x0: 300, x1: 700, wall: 24, mid: 410, eave: 262, apex: 112, lx0: 96 };
+const FORGE_SPOTS: Spot[] = [
+  { room: "Projects", at: [0, 0], hot: [0, 0], name: "Projects" },
+  { room: "the Guild room", at: [0, 0], hot: [0, 0], name: "the Guild room" },
+  { room: "Repairs", at: [0, 0], hot: [0, 0], name: "Repairs" },
+];
+function coursed(R: Pt[], x0: number, x1: number, y0: number, y1: number, tone = "#bdb8b0") {
+  poly(R, tone, 2.4);
+  clipTo(R, () => { for (let y = y0; y < y1; y += 14) { const off = ((y / 14) % 2) * 9; for (let x = x0 - 20 + off; x < x1; x += 18) poly(rect2(x, y + 1, x + 16, y + 12), h2(x, y) < 0.3 ? "#a8a39b" : null, 0.9, "#6d6862"); } });
+  poly(R, null, 2.6);
+}
+function forgeStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { gy, x0, x1, wall, mid, eave, apex, lx0 } = FG, ix0 = x0 + wall, ix1 = x1 - wall;
+  c.fillStyle = "#d4cfc7"; c.fillRect(0, 0, FG.w, FG.h);
+  for (let k = 0; k < 1000; k++) { c.fillStyle = "rgba(30,28,26,.06)"; c.fillRect(h2(k, 1) * FG.w, h2(k, 2) * FG.h, 1.4, 1.4); }
+  // the ground, cut through
+  poly([[0, gy + 6], [180, gy], [820, gy - 2], [820, 700], [0, 700]], "#bdb7ac", 2.4); hatch([[0, gy + 6], [820, gy - 2], [820, 700], [0, 700]], 6, "#8d887f");
+  for (let k = 0; k < 30; k++) ell(h2(k, 5) * 820, gy + 24 + h2(k, 6) * 70, 4 + h2(k, 7) * 6, 2 + h2(k, 8) * 3, "#a8a196", 1);
+  // inside: the back wall, lime-washed below and soot-dark by the chimney
+  poly(rect2(ix0, eave, ix1, gy), "#e6e1d7", 0);
+  const sg = c.createRadialGradient(610, 470, 10, 610, 470, 200); sg.addColorStop(0, "rgba(40,36,32,.4)"); sg.addColorStop(1, "rgba(40,36,32,0)"); c.fillStyle = sg; c.fillRect(ix0, eave, ix1 - ix0, gy - eave);
+  for (let r = 0; r < 12; r++) for (let q = 0; q < 7; q++) if (h2(r, q * 5) < 0.16) { const y = eave + 10 + r * 26, x = ix0 + 8 + q * 50 + (r % 2) * 25; poly(rect2(x, y, x + 40, y + 18), "#dcd8d1", 1, "#9d988f"); }
+  // the gable: the upper room sits under the roof
+  const gable: Pt[] = [[ix0, eave], [mid + 90, apex + 26], [ix1, eave]];
+  poly([[ix0, eave], [mid + 90, apex + 26], [ix1, eave]], open("the Guild room") ? "#e9e5dc" : "#cfcac2", 0);
+  void gable;
+  // the walls, cut through
+  coursed(rect2(x0, eave, ix0, gy), x0, ix0, eave, gy); coursed(rect2(ix1, eave, x1, gy), ix1, x1, eave, gy);
+  // the upper floor, on beams
+  poly(rect2(ix0, 392, ix1, 408), "#a8977a", 2.2); for (let x = ix0 + 40; x < ix1; x += 60) poly(rect2(x - 7, 408, x + 7, 420), "#8d7a62", 1.6);
+  poly(rect2(ix0, gy - 2, ix1, gy + 6), "#9d988f", 2);
+  // a hatch and ladder up to the Guild room
+  poly(rect2(ix0 + 8, 392, ix0 + 58, 408), "#e6e1d7", 1.4);
+  for (const x of [ix0 + 14, ix0 + 50]) line([[x - 6, gy], [x + 4, 380]], 3.2, "#6f6252");
+  for (let k = 1; k < 10; k++) { const y = gy - k * ((gy - 384) / 10); line([[ix0 + 9 + (gy - y) * 0.047, y], [ix0 + 45 + (gy - y) * 0.047, y]], 2.2, "#6f6252"); }
+  // the roof: thatch over the gable, cut through so you see its thickness
+  const roof: Pt[] = [[x0 - 34, eave + 4], [mid + 90, apex - 18], [x1 + 34, eave + 4], [x1 + 4, eave + 30], [mid + 90, apex + 26], [x0 - 4, eave + 30]];
+  poly(roof, "#d7d0c1", 2.6);
+  clipTo(roof, () => { for (let k = 0; k < 220; k++) { const u = h2(k, 3), side = k % 2, x = side ? (mid + 90) + u * (x1 + 34 - mid - 90) : (x0 - 34) + u * (mid + 90 - x0 + 34), y = side ? apex - 18 + u * (eave + 4 - apex + 18) : eave + 4 - u * (eave + 4 - apex + 18); line([[x, y], [x + (side ? -4 : 4), y + 26]], 0.9, "#8f897d"); } });
+  poly(roof, null, 2.6);
+  // the chimney stack, up the right wall and out through the thatch
+  const cx0 = 604, cx1 = ix1;
+  coursed(rect2(cx0, 300, cx1, gy - 64), cx0, cx1, 300, gy - 64, "#aaa59d");
+  coursed([[cx0 + 6, 300], [cx1, 300], [cx1, 64], [cx0 + 6, 64]], cx0 + 6, cx1, 64, 300, "#aaa59d");
+  poly(rect2(cx0, 56, cx1 + 6, 66), "#8d887f", 2);
+  // the hearth: a raised stone bed, its fire opening, and the hood narrowing into the stack
+  coursed(rect2(548, gy - 64, ix1, gy), 548, ix1, gy - 64, gy, "#cfcac2");
+  poly(rect2(548, gy - 70, ix1, gy - 64), "#5f5b55", 2);
+  for (let k = 0; k < 9; k++) ell(560 + h2(k, 1) * 100, gy - 72 + h2(k, 2) * 4, 7, 4, h2(k, 3) < 0.4 ? "#8d887f" : "#3a3733", 0.9);
+  poly([[536, gy - 150], [ix1, gy - 150], [ix1, 418], [cx0, 418]], "#9d988f", 2.4); hatch([[536, gy - 150], [ix1, gy - 150], [ix1, 418], [cx0, 418]], 5, "#6d6862");
+  line([[536, gy - 150], [ix1, gy - 150]], 4);
+  // the Guild room's window and charter, or its chalk mark
+  if (open("the Guild room")) {
+    const W: Pt[] = [[mid + 40, 330], [mid + 40, 290], [mid + 60, 276], [mid + 80, 290], [mid + 80, 330]]; poly(W, "#f4f2ed", 2.2); line([[mid + 60, 278], [mid + 60, 330]], 1.6);
+    const Ch = rect2(ix0 + 14, 292, ix0 + 66, 344); poly(Ch, "#efe8da", 1.8);
+    for (let k = 0; k < 5; k++) line([[ix0 + 20, 304 + k * 8], [ix0 + 60 - (k % 2) * 10, 304 + k * 8]], 1, "#5f5b55");
+    ell(ix0 + 40, 340, 6, 6, "#d2483a", 1.2);
+  } else chalkAt(mid + 20, 380);
+  // the lean-to for Repairs, built against the left wall once it's used
+  if (open("Repairs")) {
+    const lx = lx0, ly = 470, ry = 410;
+    coursed(rect2(lx, ly, lx + 20, gy), lx, lx + 20, ly, gy, "#cfcac2");
+    poly([[lx + 20, ly], [x0, ry + 20], [x0, gy], [lx + 20, gy]], "#e6e1d7", 0);
+    const R: Pt[] = [[lx - 18, ly + 2], [x0, ry - 8], [x0, ry + 14], [lx - 4, ly + 22]]; poly(R, "#9d988f", 2.4); hatch(R, 4, "#5f5b55");
+    for (let x = lx + 20; x < x0; x += 34) line([[x, ly + 20 - (x - lx - 20) * 0.32], [x, ly + 26 - (x - lx - 20) * 0.32]], 1, "#6f6b65");
+    const Wn = rect2(lx + 60, 506, lx + 96, 540); poly(Wn, "#f4f2ed", 2); line([[lx + 78, 506], [lx + 78, 540]], 1.4);
+    poly(rect2(lx + 20, gy - 2, x0, gy + 6), "#9d988f", 2);
+  } else chalkAt(200, gy - 8);
+}
+function forgeThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], { gy, wall, x0 } = FG, ix0 = FG.x0 + wall;
+  // the fire is always lit: this is a forge
+  out.push({ depth: 0, draw: () => {
+    flameAt(c, 600, gy - 72, 1.1, t);
+    for (let k = 0; k < 6; k++) { const ph = (t * 0.8 + k / 6) % 1; c.globalAlpha = 1 - ph; ell(600 + Math.sin(k * 3.1 + t) * 16 * ph, gy - 100 - ph * 70, 1.6, 1.6, "#d2483a"); c.globalAlpha = 1; }
+  } });
+  // the wall of work: a forged piece on the rail for each project shipped
+  out.push({ depth: 0, draw: () => {
+    const n = Math.min(extra.shipped, 14), pieces = ["horseshoe", "hinge", "key", "hook", "blade", "ring"];
+    line([[ix0 + 74, 448], [ix0 + 230, 448]], 4, "#6f6252"); for (const x of [ix0 + 78, ix0 + 226]) line([[x, 444], [x, 454]], 3);
+    for (let k = 0; k < n; k++) {
+      const row = Math.floor(k / 7), px = ix0 + 88 + (k % 7) * 20, py = 452 + row * 40, kind = pieces[k % pieces.length];
+      line([[px, py - 4], [px, py + 2]], 1); c.lineWidth = 3; c.strokeStyle = "#3a3733"; c.beginPath();
+      if (kind === "horseshoe") c.arc(px, py + 12, 8, Math.PI * 0.15, Math.PI * 0.85, true);
+      else if (kind === "hinge") { c.moveTo(px - 2, py + 2); c.lineTo(px - 2, py + 26); c.moveTo(px - 2, py + 6); c.lineTo(px + 8, py + 4); }
+      else if (kind === "key") { c.arc(px, py + 7, 4, 0, Math.PI * 2); c.moveTo(px, py + 11); c.lineTo(px, py + 28); c.lineTo(px + 5, py + 28); }
+      else if (kind === "hook") { c.moveTo(px, py + 2); c.lineTo(px, py + 18); c.arc(px + 5, py + 18, 5, Math.PI, 0, true); }
+      else if (kind === "blade") { c.moveTo(px, py + 2); c.lineTo(px, py + 8); c.moveTo(px - 2, py + 8); c.lineTo(px + 2, py + 8); c.lineTo(px + 1, py + 30); c.lineTo(px - 1, py + 30); c.closePath(); }
+      else c.arc(px, py + 12, 7, 0, Math.PI * 2);
+      c.stroke();
+    }
+    if (!n) { c.font = `italic 12px 'IM Fell English', Georgia, serif`; c.fillStyle = "#7d7871"; c.textAlign = "center"; c.fillText("a piece hangs here for each project shipped", ix0 + 152, 470); }
+  } });
+  if (open("Projects")) {
+    out.push({ depth: 1, draw: () => {
+      // the bellows beside the hearth, worked by a lever
+      const pump = Math.sin(t * 1.6) * 5, bx = 508, by = gy - 46;
+      poly([[bx - 30, by - 8 - pump], [bx + 26, by - 4], [bx + 26, by + 6], [bx - 30, by + 14 + pump]], "#6f6252", 2); hatch([[bx - 30, by - 8], [bx + 26, by - 4], [bx + 26, by + 6], [bx - 30, by + 14]], 4, "#4c4035");
+      line([[bx + 26, by + 1], [548, by - 6]], 3); line([[bx - 22, by + 14], [bx - 22, gy]], 3); line([[bx + 18, by + 6], [bx + 18, gy]], 3); line([[bx - 30, by - 8 - pump], [bx - 52, by - 52 - pump]], 3);
+      // the anvil on its stump, hammer and tongs
+      const ax = 430;
+      poly([[ax - 22, gy], [ax - 18, gy - 40], [ax + 18, gy - 40], [ax + 22, gy]], "#8d7a62", 2.2); hatch([[ax, gy], [ax, gy - 40], [ax + 18, gy - 40], [ax + 22, gy]], 4, "#5f5040");
+      poly([[ax - 46, gy - 58], [ax + 22, gy - 58], [ax + 42, gy - 52], [ax + 22, gy - 48], [ax + 14, gy - 40], [ax - 14, gy - 40], [ax - 20, gy - 52]], "#3a3733", 2.4);
+      line([[ax - 44, gy - 57], [ax + 20, gy - 57]], 1.4, "#8d887f");
+      const sw = Math.max(0, Math.sin(t * 3)) * 0.45;
+      c.save(); c.translate(ax + 30, gy - 62); c.rotate(-0.9 + sw); line([[0, 0], [0, -36]], 3, "#6f6252"); poly(rect2(-9, -44, 9, -36), "#3a3733", 1.6); c.restore();
+      if (Math.sin(t * 3) > 0.92) for (let k = 0; k < 5; k++) ell(ax + 8 + k * 5, gy - 64 - k * 3, 1.4, 1.4, "#d2483a");
+      line([[ax - 40, gy - 8], [ax - 8, gy - 54]], 1.6); line([[ax - 34, gy - 6], [ax - 4, gy - 50]], 1.6);
+      // the quench trough, steaming
+      const qx = 336;
+      coursed(rect2(qx, gy - 30, qx + 72, gy), qx, qx + 72, gy - 30, gy, "#cfcac2");
+      poly(rect2(qx + 6, gy - 34, qx + 66, gy - 30), "#8d887f", 1.4);
+      for (let k = 0; k < 3; k++) { const ph = (t * 0.4 + k / 3) % 1, sx = qx + 18 + k * 18; c.globalAlpha = 0.8 * (1 - ph); line([[sx, gy - 36 - ph * 40], [sx + 4, gy - 48 - ph * 40], [sx, gy - 58 - ph * 40]], 1.4, "#9d988f"); c.globalAlpha = 1; }
+    } });
+  } else out.push({ depth: 1, draw: () => chalkAt(440, gy - 8) });
+  // the Guild room: a long bench, an hourglass running, plans and a lamp
+  if (open("the Guild room")) out.push({ depth: 1, draw: () => {
+    const fy = 392, bx0 = ix0 + 150, bx1 = 592;
+    poly(rect2(bx0, fy - 52, bx1, fy - 44), "#8d7a62", 2.2); for (const x of [bx0 + 8, bx1 - 8]) line([[x, fy - 44], [x, fy]], 3, "#6f6252");
+    poly([[bx0 + 8, fy - 52], [bx0 + 56, fy - 52], [bx0 + 62, fy - 56], [bx0 + 14, fy - 56]], "#efe8da", 1.2);
+    const hx = bx0 + 76, hy = fy - 52, sand = (t * 0.05) % 1;
+    poly([[hx - 9, hy - 40], [hx + 9, hy - 40], [hx + 1.5, hy - 20], [hx + 9, hy], [hx - 9, hy], [hx - 1.5, hy - 20]], "rgba(225,230,229,.6)", 1.6);
+    poly([[hx - 7 + sand * 5, hy - 38 + sand * 16], [hx + 7 - sand * 5, hy - 38 + sand * 16], [hx, hy - 21]], "#c9b48c", 0); poly([[hx - 8 * sand, hy - 1], [hx + 8 * sand, hy - 1], [hx, hy - 1 - 14 * sand]], "#c9b48c", 0);
+    line([[hx, hy - 21], [hx, hy - 2]], 0.8, "#c9b48c"); line([[hx - 11, hy - 42], [hx + 11, hy - 42]], 2.4, "#6f6252"); line([[hx - 11, hy + 1], [hx + 11, hy + 1]], 2.4, "#6f6252");
+    const lx = bx1 - 16; poly(rect2(lx - 7, fy - 74, lx + 7, fy - 52), "rgba(247,241,223,.6)", 1.4); flameAt(c, lx, fy - 58, 0.32, t);
+    poly(rect2(bx0 + 40, fy - 30, bx0 + 70, fy - 24), "#a8977a", 1.6); for (const dx of [44, 55, 66]) line([[bx0 + dx, fy - 24], [bx0 + dx + (dx - 55) * 0.2, fy]], 2.2);
+  } });
+  // Repairs: a mending bench with a vise, a riveted kettle, a cartwheel waiting for its spoke
+  if (open("Repairs")) out.push({ depth: 1, draw: () => {
+    const bx0 = FG.lx0 + 30, bx1 = x0 - 20;
+    poly(rect2(bx0, gy - 48, bx1, gy - 40), "#8d7a62", 2.2); for (const x of [bx0 + 6, bx1 - 6]) line([[x, gy - 40], [x, gy]], 3, "#6f6252");
+    poly(rect2(bx0 + 12, gy - 66, bx0 + 26, gy - 48), "#5f5b55", 1.6); line([[bx0 + 4, gy - 62], [bx0 + 34, gy - 62]], 2);
+    ell(bx0 + 70, gy - 58, 12, 10, "#8d887f", 1.6); for (let k = 0; k < 4; k++) ell(bx0 + 62 + k * 5, gy - 58, 1, 1, "#e3dfd8"); line([[bx0 + 82, gy - 62], [bx0 + 90, gy - 70]], 2);
+    const wx = bx1 - 10, wy = gy - 40; c.lineWidth = 3; c.strokeStyle = INK; c.beginPath(); c.arc(wx, wy, 34, 0, Math.PI * 2); c.stroke();
+    c.lineWidth = 1.8; for (let k = 0; k < 8; k++) { if (k === 3) continue; const a = (k / 8) * Math.PI * 2; c.beginPath(); c.moveTo(wx, wy); c.lineTo(wx + Math.cos(a) * 32, wy + Math.sin(a) * 32); c.stroke(); }
+    ell(wx, wy, 6, 6, "#8d7a62", 1.4);
+  } });
+  return out;
+}
+const forgeBand = (i: number): [number, number, number, number] => i === 0 ? [FG.x0, 408, FG.x1, FG.gy] : i === 1 ? [FG.x0, FG.apex, FG.x1, 408] : [FG.lx0 - 20, 400, FG.x0, FG.gy];
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -490,7 +476,12 @@ type Scene = {
 };
 const SCENES: Partial<Record<BuildingId, Scene>> = {
   "stone-field": { spots: STONE_FIELD, still: stoneFieldStill, things: stoneFieldThings, front: stoneFieldFront },
-  "forge": { spots: FORGE, still: forgeStill, things: forgeThings, front: forgeFront, size: [820, 660], shift: 120 },
+  "forge": {
+    spots: FORGE_SPOTS, still: forgeStill, things: forgeThings, front: () => {}, size: [FG.w, FG.h],
+    hit: (x, y) => [0, 1, 2].find((i) => { const [a, b, c2, d] = forgeBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
+    stand: (i) => i === 0 ? [505, FG.gy, 0.6] : i === 1 ? [FG.x0 + 120, 392, 0.6] : [FG.lx0 + 80, FG.gy, 0.6],
+    labelAt: (i) => i === 0 ? [FG.x0 + 110, 432] : i === 1 ? [FG.x0 + 110, 280] : [FG.lx0 + 100, 380],
+  },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],
     hit: (x, y) => (x < TOWER.x0 - 40 || x > TOWER.x1 + 40 ? -1 : [0, 1, 2].find((i) => { const [a, b] = towerBand(i); return y >= a - 10 && y <= b + 10; }) ?? -1),
