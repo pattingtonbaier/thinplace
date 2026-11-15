@@ -204,15 +204,15 @@ function forgeStill(rooms: Rooms) {
     // a half-height screen of boards with an open lattice above, so the room stays in view
     const sx = -1.25, y0 = -A + 0.02, y1 = -1.2, low = 54, top = 116, t2 = 0.07;
     const face: Pt[] = [P(sx, y1, 0), P(sx, y0, 0), P(sx, y0, low), P(sx, y1, low)];
-    poly(face, "#a8977a", 2.2);
-    for (let y = y0 + 0.24; y < y1 - 0.05; y += 0.24) line([P(sx, y, 2), P(sx, y, low - 2)], 1, "#6f6252");
-    poly([P(sx - t2, y0, low), P(sx + t2, y0, low), P(sx + t2, y1, low), P(sx - t2, y1, low)], "#c2b394", 1.8); // the cap rail
-    poly([P(sx, y1, 0), P(sx - t2 * 2, y1, 0), P(sx - t2 * 2, y1, low), P(sx, y1, low)], "#8d7a62", 1.6); // the end of the boards
+    poly(face, "#d3cec3", 2.2);
+    for (let y = y0 + 0.24; y < y1 - 0.05; y += 0.24) line([P(sx, y, 2), P(sx, y, low - 2)], 1, "#8d887f");
+    poly([P(sx - t2, y0, low), P(sx + t2, y0, low), P(sx + t2, y1, low), P(sx - t2, y1, low)], "#e6e2da", 1.8); // the cap rail
+    poly([P(sx, y1, 0), P(sx - t2 * 2, y1, 0), P(sx - t2 * 2, y1, low), P(sx, y1, low)], "#aaa59d", 1.6); // the end of the boards
     clipTo([P(sx, y1, low), P(sx, y0, low), P(sx, y0, top), P(sx, y1, top)], () => {
-      for (let u = -2; u < 3; u += 0.32) { line([P(sx, y0 + u, low), P(sx, y0 + u + 0.8, top)], 1.6, "#8d7a62"); line([P(sx, y0 + u + 0.8, low), P(sx, y0 + u, top)], 1.6, "#8d7a62"); }
+      for (let u = -2; u < 3; u += 0.32) { line([P(sx, y0 + u, low), P(sx, y0 + u + 0.8, top)], 1.6, "#6f6b65"); line([P(sx, y0 + u + 0.8, low), P(sx, y0 + u, top)], 1.6, "#6f6b65"); }
     });
-    for (const y of [y0 + 0.04, (y0 + y1) / 2, y1]) poly([P(sx - 0.04, y, 0), P(sx + 0.04, y, 0), P(sx + 0.04, y, top + 4), P(sx - 0.04, y, top + 4)], "#8d7a62", 1.6);
-    line([P(sx, y0, top), P(sx, y1, top)], 5, INK); line([P(sx, y0, top), P(sx, y1, top)], 2.6, "#a8977a");
+    for (const y of [y0 + 0.04, (y0 + y1) / 2, y1]) poly([P(sx - 0.04, y, 0), P(sx + 0.04, y, 0), P(sx + 0.04, y, top + 4), P(sx - 0.04, y, top + 4)], "#6f6b65", 1.6);
+    line([P(sx, y0, top), P(sx, y1, top)], 5, INK); line([P(sx, y0, top), P(sx, y1, top)], 2.6, "#8d887f");
     const Ch: Pt[] = [P(-2.6, -A, 110), P(-1.7, -A, 110), P(-1.7, -A, 160), P(-2.6, -A, 160)]; poly(Ch, "#efe8da", 1.8);
     clipTo(Ch, () => { const [cx, cy] = P(-2.15, -A, 140); for (let k = 0; k < 4; k++) line([[cx - 30, cy - 6 + k * 7 + 12], [cx + 22, cy - 18 + k * 7 + 12]], 1, "#5f5b55"); });
     const [sx2, sy2] = P(-2.0, -A, 116); ell(sx2, sy2, 6, 6, "#d2483a", 1.2);
