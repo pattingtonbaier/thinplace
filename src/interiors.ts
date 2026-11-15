@@ -467,6 +467,123 @@ function forgeThings(rooms: Rooms, t: number): { depth: number; draw: () => void
 }
 const forgeBand = (i: number): [number, number, number, number] => i === 0 ? [FG.x0, 408, FG.x1, FG.gy] : i === 1 ? [FG.x0, FG.apex, FG.x1, 408] : [FG.lx0 - 20, 400, FG.x0, FG.gy];
 
+// ---------- the Craft Hall: two workshops below, the illuminator above, the Camera Obscura on the ridge ----------
+const CH = { w: 820, h: 760, gy: 660, x0: 196, x1: 644, wall: 24, mid: 420, fl: 452, eave: 300, apex: 168 };
+const CRAFT_SPOTS: Spot[] = [
+  { room: "the illuminator's desk", at: [0, 0], hot: [0, 0], name: "the illuminator's desk" },
+  { room: "the Camera Obscura", at: [0, 0], hot: [0, 0], name: "the Camera Obscura" },
+  { room: "the Kiln", at: [0, 0], hot: [0, 0], name: "the Kiln" },
+  { room: "the Builder's Bench", at: [0, 0], hot: [0, 0], name: "the Builder's Bench" },
+];
+function craftStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { gy, x0, x1, wall, mid, fl, eave, apex } = CH, ix0 = x0 + wall, ix1 = x1 - wall, rx = (x0 + x1) / 2;
+  c.fillStyle = "#d4cfc7"; c.fillRect(0, 0, CH.w, CH.h);
+  for (let k = 0; k < 1000; k++) { c.fillStyle = "rgba(30,28,26,.06)"; c.fillRect(h2(k, 1) * CH.w, h2(k, 2) * CH.h, 1.4, 1.4); }
+  poly([[0, gy + 4], [820, gy - 4], [820, 760], [0, 760]], "#bdb7ac", 2.4); hatch([[0, gy + 4], [820, gy - 4], [820, 760], [0, 760]], 6, "#8d887f");
+  for (let k = 0; k < 30; k++) ell(h2(k, 5) * 820, gy + 24 + h2(k, 6) * 70, 4 + h2(k, 7) * 6, 2 + h2(k, 8) * 3, "#a8a196", 1);
+  // inside walls, lime-washed, and the gable room under the roof
+  poly(rect2(ix0, eave, ix1, gy), "#e6e1d7", 0);
+  poly([[ix0, eave], [rx, apex + 28], [ix1, eave]], "#e9e5dc", 0);
+  for (let r = 0; r < 14; r++) for (let q = 0; q < 8; q++) if (h2(r, q * 5) < 0.15) { const y = eave + 10 + r * 26, x = ix0 + 8 + q * 50 + (r % 2) * 25; if (y > gy - 20) continue; poly(rect2(x, y, x + 40, y + 18), "#dcd8d1", 1, "#9d988f"); }
+  // the outer walls, cut through
+  coursed(rect2(x0, eave, ix0, gy), x0, ix0, eave, gy); coursed(rect2(ix1, eave, x1, gy), ix1, x1, eave, gy);
+  // the stone wall between the two workshops, with a doorway
+  coursed(rect2(mid - 8, fl + 16, mid + 8, gy - 110), mid - 8, mid + 8, fl + 16, gy - 110, "#cfcac2");
+  // the upper floor on its beams, and the cellar-less floor below
+  poly(rect2(ix0, fl, ix1, fl + 16), "#a8977a", 2.2); for (let x = ix0 + 40; x < ix1; x += 64) poly(rect2(x - 7, fl + 16, x + 7, fl + 28), "#8d7a62", 1.6);
+  poly(rect2(ix0, gy - 2, ix1, gy + 6), "#9d988f", 2);
+  // the stair up the right-hand end, through a hatch
+  for (let k = 0; k < 9; k++) { const y = gy - (k + 1) * ((gy - fl) / 9), x = ix1 - 96 + k * 10; poly(rect2(x, y, ix1, y + (gy - fl) / 9), k % 2 ? "#cfcac2" : "#d9d5ce", 1.2); }
+  poly(rect2(ix1 - 50, fl, ix1, fl + 16), "#e6e1d7", 0);
+  // windows: one to each workshop, one under the gable
+  for (const [cx, y0, y1] of [[460, 360, 412]] as [number, number, number][]) {
+    const W: Pt[] = [[cx - 20, y1], [cx - 20, y0 + 16], [cx, y0], [cx + 20, y0 + 16], [cx + 20, y1]]; poly(W, "#f4f2ed", 2.2); line([[cx, y0 + 2], [cx, y1]], 1.6); poly(rect2(cx - 24, y1, cx + 24, y1 + 6), "#cfcac2", 1.4);
+  }
+  // the roof, thatched, cut through
+  const roof: Pt[] = [[x0 - 34, eave + 4], [rx, apex - 18], [x1 + 34, eave + 4], [x1 + 4, eave + 30], [rx, apex + 26], [x0 - 4, eave + 30]];
+  poly(roof, "#d7d0c1", 2.6);
+  clipTo(roof, () => { for (let k = 0; k < 240; k++) { const u = h2(k, 3), side = k % 2, x = side ? rx + u * (x1 + 34 - rx) : (x0 - 34) + u * (rx - x0 + 34), y = side ? apex - 18 + u * (eave + 4 - apex + 18) : eave + 4 - u * (eave + 4 - apex + 18); line([[x, y], [x + (side ? -4 : 4), y + 26]], 0.9, "#8f897d"); } });
+  poly(roof, null, 2.6);
+  // the Camera Obscura: a turret on the ridge, a lens and a tilted mirror at its top, a white table below
+  if (open("the Camera Obscura")) {
+    const tx0 = rx - 74, tx1 = rx + 74, ty0 = 60, ty1 = apex + 4;
+    poly(rect2(tx0, ty0, tx1, ty1), "#e9e5dc", 0);
+    coursed(rect2(tx0 - 14, ty0, tx0, ty1), tx0 - 14, tx0, ty0, ty1, "#cfcac2"); coursed(rect2(tx1, ty0, tx1 + 14, ty1), tx1, tx1 + 14, ty0, ty1, "#cfcac2");
+    poly([[tx0 - 24, ty0 + 2], [rx, ty0 - 40], [tx1 + 24, ty0 + 2]], "#77736d", 2.4); hatch([[tx0 - 24, ty0 + 2], [rx, ty0 - 40], [tx1 + 24, ty0 + 2]], 4, "#4c4945");
+    // the lens in its brass ring, and the mirror tilted to throw the view down
+    ell(rx + 34, ty0 + 14, 10, 10, "#c9b48c", 2); ell(rx + 34, ty0 + 14, 5, 5, "#e9eef0", 1);
+    line([[rx + 10, ty0 + 6], [rx + 36, ty0 + 30]], 3.2, "#8d887f");
+    c.save(); c.globalAlpha = 0.25; c.fillStyle = "#f7f1df"; c.beginPath(); c.moveTo(rx + 24, ty0 + 20); c.lineTo(rx - 60, ty1 - 34); c.lineTo(rx + 16, ty1 - 34); c.closePath(); c.fill(); c.restore();
+    // the round white table, with the Hollow upside down on it
+    const tbx = rx - 22;
+    ell(tbx, ty1 - 30, 40, 9, "#fbfaf6", 2); line([[tbx, ty1 - 22], [tbx, ty1]], 3);
+    c.save(); c.beginPath(); c.ellipse(tbx, ty1 - 30, 38, 8, 0, 0, Math.PI * 2); c.clip();
+    for (let k = 0; k < 7; k++) { const x = tbx - 30 + k * 10; poly([[x, ty1 - 32], [x - 4, ty1 - 26], [x + 4, ty1 - 26]], "#9d988f", 0.8); }
+    line([[tbx - 36, ty1 - 30], [tbx + 36, ty1 - 30]], 1, "#9d988f"); poly([[tbx + 6, ty1 - 32], [tbx + 14, ty1 - 32], [tbx + 14, ty1 - 27], [tbx + 10, ty1 - 24], [tbx + 6, ty1 - 27]], "#cfcac2", 0.8);
+    c.restore();
+    // the ladder up through the roof
+    for (const x of [rx - 44, rx - 24]) line([[x, eave + 140], [x + 6, ty1 - 6]], 2.6, "#6f6252");
+    for (let k = 1; k < 9; k++) { const y = eave + 140 - k * ((eave + 140 - ty1) / 9); line([[rx - 44 + (eave + 140 - y) * 0.02, y], [rx - 24 + (eave + 140 - y) * 0.02, y]], 2, "#6f6252"); }
+  } else chalkAt(rx, apex - 34);
+  if (!open("the illuminator's desk")) chalkAt(rx - 10, fl - 12);
+  if (!open("the Kiln")) chalkAt(300, gy - 10);
+  if (!open("the Builder's Bench")) chalkAt(510, gy - 10);
+}
+function craftThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], { gy, fl, x0, wall } = CH, ix0 = x0 + wall;
+  // the Kiln: a brick bottle kiln with its fire-mouth, a kick-wheel, shelves of pots
+  if (open("the Kiln")) out.push({ depth: 1, draw: () => {
+    const kx = 270, kw = 46;
+    const K: Pt[] = [[kx - kw, gy], [kx - kw, gy - 80], [kx - kw + 8, gy - 112], [kx - 14, gy - 140], [kx - 14, gy - 168], [kx + 14, gy - 168], [kx + 14, gy - 140], [kx + kw - 8, gy - 112], [kx + kw, gy - 80], [kx + kw, gy]];
+    poly(K, "#b8a08a", 2.4);
+    clipTo(K, () => { for (let y = gy - 168; y < gy; y += 9) { const off = ((y / 9) % 2) * 7; for (let x = kx - kw - 10 + off; x < kx + kw; x += 14) poly(rect2(x, y + 1, x + 12, y + 8), null, 0.8, "#7a6450"); } });
+    poly(K, null, 2.4);
+    poly([[kx - 18, gy], [kx - 18, gy - 26], [kx, gy - 38], [kx + 18, gy - 26], [kx + 18, gy]], "#2a2724", 2);
+    c.globalAlpha = 0.2; ell(kx, gy - 20, 40, 26, "#d2483a"); c.globalAlpha = 1; flameAt(c, kx, gy - 4, 0.55, t);
+    for (let k = 0; k < 3; k++) { const ph = (t * 0.3 + k / 3) % 1; c.globalAlpha = 0.7 * (1 - ph); line([[kx - 4 + k * 4, gy - 172 - ph * 40], [kx + k * 4, gy - 186 - ph * 40], [kx - 4 + k * 4, gy - 198 - ph * 40]], 1.4, "#9d988f"); c.globalAlpha = 1; }
+    // the kick-wheel, a pot turning on it
+    const wx = 366, spin = Math.sin(t * 4) * 3;
+    line([[wx, gy - 6], [wx, gy - 48]], 3); ell(wx, gy - 6, 26, 6, "#8d7a62", 2); ell(wx, gy - 48, 20, 5, "#a8977a", 2);
+    poly([[wx - 9, gy - 50], [wx + 9, gy - 50], [wx + 12 + spin * 0.3, gy - 64], [wx + 7, gy - 78], [wx - 7, gy - 78], [wx - 12 - spin * 0.3, gy - 64]], "#c9b9a2", 1.8);
+    // a shelf of fired pots
+    const sy = gy - 124; poly(rect2(330, sy, 408, sy + 6), "#8d7a62", 1.8);
+    for (let k = 0; k < 3; k++) { const px = 344 + k * 24, h = 18 + h2(k, 4) * 14; poly([[px - 8, sy], [px + 8, sy], [px + 10, sy - h * 0.6], [px + 5, sy - h], [px - 5, sy - h], [px - 10, sy - h * 0.6]], ["#cfc3b2", "#9d988f", "#e3dfd8"][k], 1.4); }
+  } });
+  // the Builder's Bench: a model of the Bothy in blocks, a box of bricks, chisels on the wall
+  if (open("the Builder's Bench")) out.push({ depth: 1, draw: () => {
+    const bx0 = 440, bx1 = 572;
+    poly(rect2(bx0, gy - 56, bx1, gy - 48), "#8d7a62", 2.2); for (const x of [bx0 + 8, bx1 - 8]) line([[x, gy - 48], [x, gy]], 3, "#6f6252");
+    // the model, block by block
+    const mx = 480, my = gy - 56;
+    for (let r = 0; r < 3; r++) for (let q = 0; q < 4; q++) poly(rect2(mx - 28 + q * 14 + (r % 2) * 7, my - 10 - r * 10, mx - 16 + q * 14 + (r % 2) * 7, my - r * 10), (q + r) % 3 ? "#e3dfd8" : "#cfcac2", 1.2);
+    poly([[mx - 32, my - 30], [mx + 2, my - 52], [mx + 34, my - 30]], "#9d988f", 1.6);
+    for (let k = 0; k < 3; k++) ell(mx - 18 + k * 18, my - 62, 2, 2, "#5f5b55");
+    poly(rect2(bx1 - 40, gy - 72, bx1 - 10, gy - 56), "#a8977a", 1.6); for (let k = 0; k < 4; k++) poly(rect2(bx1 - 36 + k * 6, gy - 78, bx1 - 32 + k * 6, gy - 72), "#e3dfd8", 0.8);
+    line([[bx0 + 4, gy - 160], [bx1 - 4, gy - 160]], 3, "#6f6252");
+    for (let k = 0; k < 5; k++) { const x = bx0 + 20 + k * 22; line([[x, gy - 158], [x, gy - 126]], 2.4, "#3a3733"); poly(rect2(x - 3, gy - 160, x + 3, gy - 144), "#8d7a62", 1); }
+  } });
+  // the illuminator's desk: a slanted desk under the window, pigments, pages drying on a cord
+  if (open("the illuminator's desk")) out.push({ depth: 1, draw: () => {
+    const dx = 300;
+    poly([[dx - 50, fl - 70], [dx + 42, fl - 92], [dx + 46, fl - 82], [dx - 46, fl - 60]], "#8d7a62", 2.2);
+    for (const x of [dx - 40, dx + 36]) line([[x, fl - 66], [x, fl]], 3, "#6f6252");
+    const pg: Pt[] = [[dx - 34, fl - 74], [dx + 30, fl - 88], [dx + 34, fl - 78], [dx - 30, fl - 64]]; poly(pg, "#efe8da", 1.4);
+    poly([[dx - 26, fl - 76], [dx - 14, fl - 79], [dx - 12, fl - 70], [dx - 24, fl - 67]], "#d2483a", 1); // a rubricated initial
+    for (let k = 0; k < 3; k++) line([[dx - 8, fl - 80 + k * 4 - k * 0.6], [dx + 26, fl - 87 + k * 4]], 0.8, "#5f5b55");
+    // pigments on a shelf, and a horn of ink
+    poly(rect2(ix0 + 12, fl - 120, ix0 + 120, fl - 114), "#8d7a62", 1.6);
+    ["#3a3733", "#9d988f", "#c9b48c", "#d2483a", "#e3dfd8", "#6f6b65"].forEach((col, k) => { const px = ix0 + 22 + k * 16; poly(rect2(px - 5, fl - 134, px + 5, fl - 120), "rgba(225,230,229,.7)", 1.1); poly(rect2(px - 4, fl - 128, px + 4, fl - 121), col, 0); });
+    poly([[dx + 52, fl - 92], [dx + 60, fl - 92], [dx + 58, fl - 76], [dx + 54, fl - 76]], "#3a3733", 1.2);
+    // pages pegged on a cord to dry
+    const cy = CH.eave + 50; line([[488, cy], [604, cy + 6]], 1.2);
+    for (let k = 0; k < 3; k++) { const px = 494 + k * 38, py = cy + 2 + k * 2; poly(rect2(px, py, px + 30, py + 40), "#efe8da", 1.4); line([[px + 15, py - 4], [px + 15, py + 4]], 2); for (let q = 0; q < 3; q++) line([[px + 5, py + 12 + q * 8], [px + 25, py + 12 + q * 8]], 0.8, "#8d887f"); }
+  } });
+  void gy;
+  return out;
+}
+const craftBand = (i: number): [number, number, number, number] =>
+  i === 0 ? [CH.x0, CH.apex, CH.x1, CH.fl] : i === 1 ? [CH.mid - 90, 0, CH.mid + 90, CH.apex - 6] : i === 2 ? [CH.x0, CH.fl + 16, CH.mid, CH.gy] : [CH.mid, CH.fl + 16, CH.x1, CH.gy];
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -481,6 +598,13 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     hit: (x, y) => [0, 1, 2].find((i) => { const [a, b, c2, d] = forgeBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
     stand: (i) => i === 0 ? [505, FG.gy, 0.6] : i === 1 ? [FG.x0 + 120, 392, 0.6] : [FG.lx0 + 80, FG.gy, 0.6],
     labelAt: (i) => i === 0 ? [FG.x0 + 110, 432] : i === 1 ? [FG.x0 + 110, 280] : [FG.lx0 + 100, 380],
+  },
+  "craft-hall": {
+    spots: CRAFT_SPOTS, still: craftStill, things: craftThings, front: () => {}, size: [CH.w, CH.h],
+    hit: (x, y) => [1, 0, 2, 3].find((i) => { const [a, b, c2, d] = craftBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
+    // (the turret is checked first, so a tap on it isn't taken by the room below)
+    stand: (i) => i === 0 ? [CH.x0 + 270, CH.fl, 0.6] : i === 1 ? [(CH.x0 + CH.x1) / 2 + 46, CH.apex + 4, 0.45] : i === 2 ? [CH.x0 + 150, CH.gy, 0.6] : [CH.mid + 150, CH.gy, 0.6],
+    labelAt: (i) => i === 0 ? [CH.x0 + 330, CH.eave + 14] : i === 1 ? [(CH.x0 + CH.x1) / 2 + 150, 40] : i === 2 ? [CH.x0 + 110, CH.fl + 46] : [CH.mid + 110, CH.fl + 46],
   },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],
