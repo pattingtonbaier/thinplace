@@ -111,6 +111,15 @@ export const ACTIONS: Action[] = [
   A("volunteer", "Volunteered", "feasting-halls", "the Moot Hall", "growth", 30, "F", ["volunteer", "community"]),
   A("games", "Played games", "feasting-halls", "Fidchell Hall", "experience", 4, "E", ["game", "games", "arcade", "board game"]),
 
+  // The Market Square rewards keeping, mending and letting go. Bringing things home earns a little; it's mostly a record.
+  A("clothes", "Brought home clothing", "market-square", "the Weaver", "experience", 4, "E", ["clothes", "clothing", "shirt", "shoes", "jacket", "bought clothes"]),
+  A("mend", "Mended clothes", "market-square", "the Weaver", "growth", 20, "N", ["mend", "darn", "sew", "patch", "hem", "button"]),
+  A("homeware", "Brought home something for the house", "market-square", "the Peddler's Market", "experience", 4, "E", ["bought", "buy", "purchase", "shopping", "homeware", "furniture"]),
+  A("kept-back", "Let a want go", "market-square", "the Peddler's Market", "growth", 10, "R", ["didn't buy", "resisted", "want"]),
+  A("let-go", "Let something go", "market-square", "the Barter Stall", "growth", 15, "R", ["sell", "sold", "donate", "gave away", "swap", "recycle", "declutter"]),
+  A("bike-care", "Looked after the bike", "market-square", "the Wheelwright", "growth", 15, "R", ["bike service", "chain", "tyre", "tire", "tune up", "puncture"]),
+  A("car-care", "Looked after the car", "market-square", "the Carriage House", "growth", 10, "R", ["car", "oil change", "car wash", "car service", "mechanic"]),
+
   A("meditate", "Meditation or breathwork", "healing-well", "the Moon Garden", "growth", 15, "N", ["meditate", "breathe", "breathwork"]),
   A("therapy", "Therapy session", "healing-well", "Therapy", "growth", 25, "N", ["therapy", "counselling"], true),
   A("appointment", "Health appointment", "healing-well", "the Apothecary", "growth", 15, "N", ["doctor", "dentist", "appointment", "checkup"], true),

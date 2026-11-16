@@ -56,6 +56,9 @@ export interface Log {
   kind?: string; // for nature finds: bird, plant, flower, creature or stone
   who?: string[]; // for time with friends: initials or nicknames, kept only in the save
   place?: string; // for eating out: the name of the place
+  item?: string; // for the Market Square: the thing brought home or let go
+  how?: "sold" | "swapped" | "gave" | "recycled"; // for letting go
+  waited?: boolean; // brought home after a moon on the waiting hook
   late?: number; // added later for an earlier day (a relic allows it); ts is set back to that day
   deleted?: number; // a tombstone, so a deletion survives a merge
 }
@@ -79,7 +82,7 @@ export interface Save {
   habits: Habit[];
   logs: Log[];
   journal: Record<string, JournalEntry>;
-  settings: { cutoffHour: number; nudges: boolean; paper?: boolean; press?: boolean; updated: number };
+  settings: { cutoffHour: number; nudges: boolean; paper?: boolean; press?: boolean; marketDay?: number; updated: number };
   done: Record<string, number>; // first-week tasks and other one-off moments
   quiz?: Quiz;
   cairn?: { text: string; written: number; opens: number }[];
@@ -87,6 +90,8 @@ export interface Save {
   gleanings?: Gleaning[]; // lines copied from the month's pages
   familiars?: Familiar[];
   relics?: RelicChoice[];
+  wants?: Want[]; // the waiting hook in the Peddler's Market
+
 }
 
 export interface RelicChoice { ember: Ember; tier: number; relic: string; chosen: number; swapped?: number }
@@ -94,6 +99,9 @@ export interface TierUp { ember: Ember; tier: number; ts: number; logId: string 
 
 export interface Notebook { n: number; started: number; finished?: number }
 export interface Gleaning { id: string; moon: string; written: number; lines: string[] }
+export interface Want { id: string; name: string; hung: number; done?: number; outcome?: "brought" | "let-go" }
+export const WAIT_DAYS = 28; // a moon on the hook
+export const WAIT_BONUS = 10; // Resolve, for waiting
 export interface Familiar { id: string; kind: "cat" | "hound" | "hare" | "hen"; name: string; since: number }
 
 // The new moons, for the monthly gleaning. A mean synodic month from a known new moon is close enough.
@@ -185,6 +193,7 @@ export function awardFor(log: Log, countToday: number): Award {
     byEmber.F = (byEmber.F ?? 0) + bonus;
     xp += bonus;
   }
+  if (log.waited) { byEmber.R = (byEmber.R ?? 0) + WAIT_BONUS; xp += WAIT_BONUS; }
   return { xp, byEmber, capped: false };
 }
 
@@ -384,6 +393,9 @@ export function merge(a: Save, b: Save): Save {
   const fam = new Map<string, Familiar>();
   for (const f of [...(a.familiars ?? []), ...(b.familiars ?? [])]) fam.set(f.id, f);
   if (fam.size) out.familiars = [...fam.values()].sort((x, y) => x.since - y.since);
+  const wants = new Map<string, Want>();
+  for (const w of [...(a.wants ?? []), ...(b.wants ?? [])]) { const p = wants.get(w.id); if (!p || (w.done ?? 0) > (p.done ?? 0)) wants.set(w.id, w); }
+  if (wants.size) out.wants = [...wants.values()].sort((x, y) => x.hung - y.hung);
   const rel = new Map<string, RelicChoice>();
   for (const r of [...(a.relics ?? []), ...(b.relics ?? [])]) { const k = r.ember + r.tier, p = rel.get(k); if (!p || (r.swapped ?? r.chosen) > (p.swapped ?? p.chosen)) rel.set(k, r); }
   if (rel.size) out.relics = [...rel.values()];

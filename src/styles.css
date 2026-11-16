@@ -287,3 +287,11 @@ img.pressed { display: block; max-width: 100%; border: 2px solid var(--ink); mar
 .inside.working { padding: 10px max(12px, env(safe-area-inset-left, 0px)) 16px; }
 .inside.working .inhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .rooms-tabs { margin-top: 10px; }
+/* the waiting hook, in the Peddler's Market card */
+.hook { margin-top: 16px; padding-top: 12px; border-top: 1.5px dashed var(--rule); display: grid; gap: 10px; }
+.hook h4 { margin: 0; font: 1.05rem var(--f-caps); letter-spacing: .04em; }
+.hook .blist { margin: 0; }
+.hook li.want { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.hook li.want b { flex: 1 1 auto; min-width: 0; }
+.hook li.want span { color: var(--soft); font-style: italic; }
+.hook li.want .row2, .hook li.want .wide { flex-basis: 100%; }

@@ -171,3 +171,12 @@ describe("quick-log search", () => {
     expect(searchActions("dinner")[0].id).toBe("cook");
   });
 });
+
+test("the waiting hook: bringing a want home after a moon adds Resolve; buying alone earns little", () => {
+  const plain = awardFor({ id: "a", ts: 0, action: "homeware" }, 0);
+  const waited = awardFor({ id: "b", ts: 0, action: "homeware", waited: true }, 0);
+  expect(plain.xp).toBe(4);
+  expect(waited.xp).toBe(14);
+  expect(waited.byEmber.R).toBe(10);
+  expect(awardFor({ id: "c", ts: 0, action: "let-go", how: "gave" }, 0).xp).toBeGreaterThan(plain.xp * 3);
+});

@@ -2,7 +2,7 @@ import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
 import { attachBothy, placeAt, STATIONS } from "./bothy";
 import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table";
-import { attachInterior, hasScene, sceneRooms, seasonOf, type Season } from "./interiors";
+import { attachInterior, hasScene, sceneRooms, seasonOf, fairOn, type Season, type Market } from "./interiors";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
@@ -10,7 +10,7 @@ import {
 } from "./content";
 import {
   addDays, dayKey, derive, lastNewMoon, EMBER_STEP, habitTicks, isOpen, levelFromXP, pointsSpent, searchActions, START_CAP, START_POINTS,
-  startEmbers, uid, weekStart, type Derived, type Habit, type Log, type Profile, type Save,
+  startEmbers, uid, weekStart, WAIT_DAYS, type Derived, type Habit, type Log, type Profile, type Save, type Want,
 } from "./engine";
 import { exportBackup, getPage, importBackup, load, persist, pressPhoto, putPage, save } from "./store";
 import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForDay, PROMPTS, suggestCalling, suggestPoints } from "./quiz";
@@ -19,7 +19,7 @@ import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForD
 type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
-  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind" | "who" | "where"
+  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind" | "who" | "where" | "letgo"
   | { found: BuildingId } | { level: number } | { relic: { ember: Ember; tier: number; swap?: boolean } };
 
 const st = {
@@ -48,6 +48,7 @@ const st = {
   findLog: "", // the nature find waiting to be named
   whoLog: "", whoDraft: [] as string[], // the gathering waiting for its guests
   whereLog: "", // the meal out waiting for its place
+  letLog: "", letHow: "" as "" | "sold" | "swapped" | "gave" | "recycled", // the thing let go, waiting for how
   late: 0, // logging for an earlier day: how many days back (0 is today)
   motion: { grind: 0, boil: 0, notch: 0 }, // when each ritual started
 };
@@ -116,6 +117,7 @@ async function logAction(actionId: string, extra: Partial<Log> = {}) {
   else toast(`${a.name}: ground in · ${parts}`);
   if (a.id === "nature") { st.findLog = l.id; st.queue.unshift("findkind"); if (st.sheet === "log") st.sheet = null; }
   if (a.id === "friends") { st.whoLog = l.id; st.whoDraft = []; st.queue.unshift("who"); if (st.sheet === "log") st.sheet = null; }
+  if (a.id === "let-go" && !extra.how) { st.letLog = l.id; st.letHow = ""; st.queue.unshift("letgo"); if (st.sheet === "log") st.sheet = null; }
   if (a.id === "eat-out") { st.whereLog = l.id; st.queue.unshift("where"); if (st.sheet === "log") st.sheet = null; }
   if (a.room === "the familiars' pen" && !(st.s.familiars ?? []).length) { st.famDraft = { kind: "cat", name: "" }; st.queue.unshift("familiar"); if (st.sheet === "log") st.sheet = null; }
   if (atTable()) { st.motion.grind = performance.now(); if (st.sheet === "log") st.sheet = null; if (st.queue.some((q) => q && typeof q === "object" && "level" in q)) st.motion.boil = performance.now(); }
@@ -176,7 +178,7 @@ function insideView(id: BuildingId) {
       <div class="inhead"><h2>${esc(b.name)}</h2><button class="ghost" data-act="leave">Leave</button></div>
       <canvas id="interior" role="application" aria-label="${esc(b.name)}, in cutaway. Tap a part of it to go there."></canvas>
       <div class="chips wrap rooms-tabs" role="tablist">${rs.map((r, k) => `<button class="chip ${k === i ? "on" : ""}" role="tab" aria-selected="${k === i}" data-act="station" data-arg="${k}">${esc(r[0].toUpperCase() + r.slice(1))}</button>`).join("")}</div>
-      <section class="card station"><h3>${esc(room[0].toUpperCase() + room.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.map(actionRow).join("")}</ul></section></section>`;
+      <section class="card station"><h3>${esc(room[0].toUpperCase() + room.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.filter((a) => a.id !== "kept-back").map(actionRow).join("")}</ul>${id === "market-square" && room === "the Peddler's Market" ? hookBlock() : ""}</section></section>`;
   }
   const rooms = roomsOf(id), i = Math.min(st.station, rooms.length - 1), room = rooms[i];
   const look = lookToOpts(st.s.profile!.look, glowSize());
@@ -227,7 +229,7 @@ function tableView() {
     <details class="plain"><summary>What's on the table</summary><ul class="blist">${SPOTS.filter((x) => x.id !== "notes" || hasNotes()).map((x) => `<li><button class="brow" data-act="spot" data-arg="${x.id}"><b>${esc(x.label.split(":")[0])}</b><span>${esc(x.label.split(":")[1]?.trim() ?? "")}</span></button></li>`).join("")}</ul></details>
   </section>`;
 }
-function hasNotes() { return tasks() !== "" || gleaningDue() || pendingRelics().length > 0 || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
+function hasNotes() { return tasks() !== "" || readyWants().length > 0 || gleaningDue() || pendingRelics().length > 0 || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
 function tableData(): TableData {
   const t = today(), now = new Date();
   const samhain = (now.getMonth() === 9 && now.getDate() === 31) || (now.getMonth() === 10 && now.getDate() === 1);
@@ -450,7 +452,7 @@ function bookSheet() {
     ${st.s.settings.paper ? `<p class="label">Gleanings from your notebooks</p>${gl || `<p class="quiet">At each new moon, the table asks you to copy a few lines from the month's pages in here.</p>`}<button class="ghost wide" data-act="glean">Glean now</button>${books ? `<p class="label">Your notebooks</p><ul class="found">${books}</ul>` : ""}` : ""}`);
 }
 function notesSheet() {
-  return sheetWrap("A slip of reminders", `${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
+  return sheetWrap("A slip of reminders", `${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${readyWants().map((w) => `<section class="card"><h3>The peddler is here</h3><p>"${esc(w.name)}" has hung on the waiting hook a whole moon. Do you still want it?</p>${wantButtons(w)}</section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
 }
 
 // ---------- sheets ----------
@@ -597,6 +599,44 @@ function whereSheet() {
     <label class="field"><span class="label">${known.length ? "Somewhere new" : "The place"}</span><input data-input="where" maxlength="28" placeholder="The name over the door" autocomplete="off"/></label>
     <button class="primary wide" data-act="where-done">Hang the sign</button>
     <button class="ghost wide" data-act="where-pick" data-arg="">Leave it unnamed</button>`);
+}
+
+// ---------- the Market Square: the waiting hook, letting go, and the market calendar ----------
+const DAY_MS = 864e5;
+const wantsWaiting = () => (st.s.wants ?? []).filter((w) => !w.done);
+const readyWants = () => wantsWaiting().filter((w) => Date.now() - w.hung >= WAIT_DAYS * DAY_MS);
+function wantButtons(w: Want) {
+  return `<div class="row2"><button class="primary" data-act="want-bring" data-arg="${w.id}:homeware">Bring it home</button><button class="ghost" data-act="want-bring" data-arg="${w.id}:clothes">It's to wear</button></div>
+    <button class="ghost wide" data-act="want-drop" data-arg="${w.id}">Let it go</button>`;
+}
+function hookBlock() {
+  const ws = wantsWaiting();
+  return `<section class="hook"><h4>The waiting hook</h4><p class="quiet">Want something? Hang it here. If you still want it after a moon, the peddler brings it, and waiting earns a little Resolve. If the wanting passes, letting it go counts too.</p>
+    ${ws.length ? `<ul class="blist">${ws.map((w) => { const left = Math.ceil(WAIT_DAYS - (Date.now() - w.hung) / DAY_MS); return `<li class="want"><b>${esc(w.name)}</b>${left <= 0 ? `<span>a moon has passed</span>${wantButtons(w)}` : `<span>${left} ${left === 1 ? "night" : "nights"} to go</span><button class="ghost" data-act="want-drop" data-arg="${w.id}">Let it go</button>`}</li>`; }).join("")}</ul>` : ""}
+    <label class="field"><span class="label">Hang a want</span><input data-input="want" maxlength="40" placeholder="What are you wanting?" autocomplete="off"/></label>
+    <button class="primary wide" data-act="want-hang">Hang it on the hook</button></section>`;
+}
+function letGoSheet() {
+  const hows: [string, string][] = [["sold", "Sold it"], ["swapped", "Swapped it"], ["gave", "Gave it away"], ["recycled", "Recycled it"]];
+  return sheetWrap("How did it go?", `<p class="blurb">It goes on the out side of the Barter Stall's scale, and a token of it into the keeping chest.</p>
+    <div class="chips wrap" role="radiogroup">${hows.map(([k, n]) => `<button class="chip ${st.letHow === k ? "on" : ""}" role="radio" aria-checked="${st.letHow === k}" data-act="let-how" data-arg="${k}">${n}</button>`).join("")}</div>
+    <label class="field"><span class="label">What was it? <small>(optional)</small></span><input data-input="letitem" maxlength="40" placeholder="So you remember it" autocomplete="off"/></label>
+    <button class="primary wide" data-act="let-done">Into the chest</button>`);
+}
+function marketCounts(): Market {
+  const q = new URLSearchParams(location.search), L = live(), now = Date.now();
+  const of = (id: string) => L.filter((l) => l.action === id);
+  const recent = (id: string) => of(id).some((l) => now - l.ts < 30 * DAY_MS);
+  const day = st.s.settings.marketDay ?? 6, dow = new Date().getDay(), fair = fairOn(new Date());
+  const forced = q.get("market"), fid = q.get("fair");
+  const mood = forced === "quiet" || forced === "market" || forced === "fair" ? forced : fair ? "fair" : dow === day ? "market" : "quiet";
+  return {
+    belt: L.filter((l) => l.action === "clothes" || l.action === "mend").map((l) => (l.action === "mend" ? "m" : "c")).join(""),
+    wares: of("homeware").length, wants: wantsWaiting().map((w) => ({ name: w.name, frac: Math.min(1, (now - w.hung) / (WAIT_DAYS * DAY_MS)) })),
+    ins: of("homeware").length + of("clothes").length, outs: of("let-go").length + of("kept-back").length,
+    tokens: of("let-go").map((l) => l.how ?? "gave"), bike: of("bike-care").length, bikeRecent: recent("bike-care"), car: of("car-care").length, carRecent: recent("car-care"),
+    mood, fair: mood === "fair" ? (fid ? fairOn(null, fid) : fair) ?? fairOn(null, "lughnasadh") : null, dow, day,
+  };
 }
 
 // ---------- familiars ----------
@@ -754,6 +794,9 @@ function settingsSheet() {
     <p class="label">When does your day end?</p>
     <div class="chips wrap">${[2, 3, 4, 5, 6].map((h) => `<button class="chip ${c === h ? "on" : ""}" data-act="cutoff" data-arg="${h}">${h} am</button>`).join("")}</div>
     <p class="quiet">Logs before this time count toward the day before. Night owls move it later.</p>
+    <p class="label">Market day</p>
+    <div class="chips wrap">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((n, k) => { const d = (k + 1) % 7; return `<button class="chip ${(st.s.settings.marketDay ?? 6) === d ? "on" : ""}" data-act="market-day" data-arg="${d}">${n}</button>`; }).join("")}</div>
+    <p class="quiet">The Market Square's awnings go up on this day. The old fair days open it too.</p>
     <p class="label">Backups</p>
     ${PREVIEW ? `<p class="quiet">This is the preview. Backups and home-screen install work in the installed app.</p>` : ""}
     <div class="row2" ${PREVIEW ? "hidden" : ""}><button class="primary" data-act="backup">Save a backup</button><label class="ghost filebtn">Open a backup<input type="file" accept=".thinplace,application/json" data-input="import" hidden/></label></div>
@@ -851,6 +894,7 @@ function sheet() {
     <div class="chips wrap">${["bird", "plant", "flower", "creature", "stone"].map((k) => `<button class="chip" data-act="find-kind" data-arg="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
     <button class="ghost wide" data-act="find-kind" data-arg="">Just a find</button>`);
   if (sh === "who") return whoSheet();
+  if (sh === "letgo") return letGoSheet();
   if (sh === "where") return whereSheet();
   if (sh === "glean") return gleanSheet();
   if ("found" in sh) return foundSheet(sh.found);
@@ -943,7 +987,7 @@ function render() {
   if (document.getElementById("table")) attachTable();
   const icv = document.getElementById("interior") as HTMLCanvasElement | null;
   if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4, { finished: st.s.logs.filter((l) => !l.deleted && l.action === "finish-book").length, shipped: st.s.logs.filter((l) => !l.deleted && l.action === "ship").length, poems: st.s.logs.filter((l) => !l.deleted && l.action === "poem").length,
-    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain"), hall: hallCounts() });
+    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain"), hall: hallCounts(), market: marketCounts() });
   document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
@@ -980,6 +1024,29 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "station": st.station = Number(arg); break;
     case "log": if (st.sheet === "tally") st.motion.notch = performance.now(); await logAction(arg); return;
     case "noop": return;
+    case "want-hang": {
+      const name = ((document.querySelector("[data-input=want]") as HTMLInputElement)?.value ?? "").trim();
+      if (!name) { toast("Name the want first."); return; }
+      (st.s.wants ??= []).push({ id: uid(), name, hung: Date.now() }); await commit();
+      toast(`"${name}" is on the waiting hook. The peddler comes back in a moon.`); break;
+    }
+    case "want-bring": case "want-drop": {
+      const [wid, kind] = arg.split(":"), w = (st.s.wants ?? []).find((x) => x.id === wid); if (!w) break;
+      w.done = Date.now(); w.outcome = act === "want-bring" ? "brought" : "let-go";
+      const waited = Date.now() - w.hung >= WAIT_DAYS * DAY_MS;
+      if (act === "want-bring") await logAction(kind === "clothes" ? "clothes" : "homeware", { item: w.name, ...(waited ? { waited: true } : {}) });
+      else await logAction("kept-back", { item: w.name });
+      if (st.sheet === "notes" && !hasNotes()) st.sheet = null;
+      render(); return;
+    }
+    case "let-how": st.letHow = arg as any; break;
+    case "let-done": {
+      const item = ((document.querySelector("[data-input=letitem]") as HTMLInputElement)?.value ?? "").trim();
+      const l = st.s.logs.find((x) => x.id === st.letLog);
+      if (l) { if (st.letHow) l.how = st.letHow; if (item) l.item = item; await commit(); }
+      st.sheet = null; nextSheet(); render(); return;
+    }
+    case "market-day": st.s.settings = { ...st.s.settings, marketDay: Number(arg), updated: Date.now() }; await commit(); break;
     case "who-toggle": { const v = arg; st.whoDraft = st.whoDraft.includes(v) ? st.whoDraft.filter((x) => x !== v) : [...st.whoDraft, v]; break; }
     case "who-done": case "who-skip": {
       const typed = act === "who-done" ? ((document.querySelector("[data-input=who]") as HTMLInputElement)?.value ?? "").split(/[,&]| and /).map((x) => x.trim()).filter(Boolean) : [];

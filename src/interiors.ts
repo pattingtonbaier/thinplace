@@ -170,7 +170,31 @@ function oghamMark(x: number, y: number, o: Og): number {
   return (o.n - 1) * 4 + 2;
 }
 export type Hall = { cups: string[]; signs: { name: string; n: number }[]; unnamedEats: number; guests: number; games: number; serve: number; hour: number; dow: number };
-type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall };
+export type Fair = { id: string; name: string };
+export type Market = {
+  belt: string; wares: number; wants: { name: string; frac: number }[]; ins: number; outs: number; tokens: string[];
+  bike: number; bikeRecent: boolean; car: number; carRecent: boolean; mood: "quiet" | "market" | "fair"; fair: Fair | null; dow: number; day: number;
+};
+type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall; market?: Market };
+const NO_MARKET: Market = { belt: "", wares: 0, wants: [], ins: 0, outs: 0, tokens: [], bike: 0, bikeRecent: false, car: 0, carRecent: false, mood: "quiet", fair: null, dow: 2, day: 6 };
+// The old fair days that open the square, whatever day of the week they fall on.
+const FAIRS: Fair[] = [
+  { id: "imbolc", name: "The Imbolc fair" }, { id: "bealtaine", name: "The Bealtaine fair" }, { id: "lughnasadh", name: "The Lughnasadh fair" },
+  { id: "puck", name: "Puck Fair" }, { id: "lammas", name: "The Ould Lammas Fair" }, { id: "horse", name: "The Ballinasloe horse fair" }, { id: "samhain", name: "The Samhain fair" },
+];
+export function fairOn(d: Date | null, id?: string): Fair | null {
+  if (id) return FAIRS.find((f) => f.id === id) ?? null;
+  if (!d) return null;
+  const m = d.getMonth(), day = d.getDate(), f = (k: string) => FAIRS.find((x) => x.id === k)!;
+  if (m === 1 && day === 1) return f("imbolc");
+  if (m === 4 && day === 1) return f("bealtaine");
+  if (m === 7 && day === 1) return f("lughnasadh");
+  if (m === 7 && day >= 10 && day <= 12) return f("puck");
+  if (m === 7) { const last = new Date(d.getFullYear(), 8, 0).getDate(); let mon = last; while (new Date(d.getFullYear(), 7, mon).getDay() !== 1) mon--; if (day === mon || day === mon + 1) return f("lammas"); }
+  if (m === 9 && day <= 7) return f("horse");
+  if ((m === 9 && day === 31) || (m === 10 && day === 1)) return f("samhain");
+  return null;
+}
 const NO_HALL: Hall = { cups: [], signs: [], unnamedEats: 0, guests: 0, games: 0, serve: 0, hour: 12, dow: 3 };
 let extra: Counts = { finished: 0, shipped: 0, poems: 0, finds: [], season: "autumn", samhain: false }, ringAt = 0, lastFinished = -1;
 function rect2(x0: number, y0: number, x1: number, y1: number): Pt[] { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
@@ -1046,6 +1070,242 @@ const feastBand = (i: number): [number, number, number, number] => {
   return i === 0 ? [236, 306, 592, FH.gy + 12] : i === 1 ? [ix0, FH.beam - 4, ix1, 306] : i === 2 ? [ix0, 306, 236, FH.gy + 12] : [592, 306, ix1, FH.gy + 12];
 };
 
+
+// ---------- the Market Square: an aonach round a market cross. It opens on your market day and on the old fair days. ----------
+// It rewards keeping, mending and letting go: the belt on the loom, the waiting hook, the scale, the wheel, the cart in its house.
+const MS = { w: 900, h: 660, gy: 470 };
+const MARKET_SPOTS: Spot[] = [
+  { room: "the Weaver", at: [0, 0], hot: [0, 0], name: "the Weaver" },
+  { room: "the Peddler's Market", at: [0, 0], hot: [0, 0], name: "the Peddler's Market" },
+  { room: "the Barter Stall", at: [0, 0], hot: [0, 0], name: "the Barter Stall" },
+  { room: "the Wheelwright", at: [0, 0], hot: [0, 0], name: "the Wheelwright" },
+  { room: "the Carriage House", at: [0, 0], hot: [0, 0], name: "the Carriage House" },
+];
+const mk = () => extra.market ?? NO_MARKET;
+const quietText = (s2: string, x: number, y: number, size = 12) => { c.font = `italic ${size}px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText(s2, x, y); };
+function awning(x0: number, x1: number, y: number, open: boolean) {
+  if (!open) { poly(rect2(x0 + 4, y - 6, x1 - 4, y + 8), "#c9c2b4", 1.8); for (let x = x0 + 16; x < x1 - 8; x += 24) line([[x, y - 6], [x, y + 8]], 1, "#8d887f"); line([[x0 + 30, y + 8], [x0 + 30, y + 16]], 1); line([[x1 - 30, y + 8], [x1 - 30, y + 16]], 1); return; }
+  const n = Math.round((x1 - x0) / 20), w = (x1 - x0) / n;
+  for (let k = 0; k < n; k++) { const a = x0 + k * w; poly([[a, y - 6], [a + w, y - 6], [a + w, y + 22], [a + w / 2, y + 30], [a, y + 22]], k % 2 ? "#a8a39b" : "#f1ece2", 1.4); }
+  poly(rect2(x0, y - 10, x1, y - 4), "#6f6252", 1.6);
+}
+function crowdFig(x: number, y: number, t: number, k: number, s2 = 1) {
+  const b = Math.sin(t * 1.1 + k * 2.1) * 1.2; c.globalAlpha = 0.45;
+  poly([[x - 12 * s2, y], [x - 10 * s2, y - 30 * s2 + b], [x - 5 * s2, y - 46 * s2 + b], [x, y - 52 * s2 + b], [x + 5 * s2, y - 46 * s2 + b], [x + 10 * s2, y - 30 * s2 + b], [x + 12 * s2, y]], "#5f5b55", 0);
+  ell(x, y - 38 * s2 + b, 6 * s2, 7 * s2, "#3a3733"); c.globalAlpha = 1;
+}
+function marketStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { gy } = MS, M = mk();
+  c.fillStyle = "#d9d5cd"; c.fillRect(0, 0, MS.w, MS.h);
+  for (let k = 0; k < 900; k++) { c.fillStyle = "rgba(30,28,26,.05)"; c.fillRect(h2(k, 1) * MS.w, h2(k, 2) * MS.h, 1.4, 1.4); }
+  // the town behind: gables and chimneys
+  for (let k = 0; k < 14; k++) {
+    const x = -30 + k * 68, w = 62, hh = 120 + h2(k, 4) * 60, base = gy - 70, top = base - hh;
+    poly([[x, base], [x, top], [x + w / 2, top - 34], [x + w, top], [x + w, base]], k % 2 ? "#bdb8b0" : "#b2ada5", 1.8);
+    poly(rect2(x + w - 18, top - 30, x + w - 10, top - 8), "#8d887f", 1.2);
+    for (let r = 0; r < 2; r++) poly(rect2(x + 14 + r * 22, top + 30, x + 24 + r * 22, top + 46), "#6f6b65", 1);
+  }
+  // the square's cobbles
+  poly([[0, gy - 44], [MS.w, gy - 44], [MS.w, MS.h], [0, MS.h]], "#cfc9be", 2.2);
+  for (let r = 0; r < 12; r++) { const y = gy - 38 + r * (10 + r * 1.6), sz = 4 + r * 0.7; for (let x = (r % 2) * sz * 1.4; x < MS.w; x += sz * 2.8) { if (h2(x, r * 7) < 0.35) continue; c.beginPath(); c.ellipse(x + h2(x, r) * 4, y, sz, sz * 0.5, 0, 0, Math.PI * 2); c.lineWidth = 0.8; c.strokeStyle = "rgba(111,107,101,.55)"; c.stroke(); } }
+  // the market house: an arcade below, a room above, a bell in the cupola
+  const hx0 = 340, hx1 = 560, hb = gy - 44, hm = hb - 112, ht = hm - 74;
+  coursed(rect2(hx0, hm, hx1, hb), hx0, hx1, hm, hb, "#c9c4bb");
+  for (let k = 0; k < 4; k++) { const ax = hx0 + 14 + k * 51, aw = 40; c.beginPath(); c.moveTo(ax, hb); c.lineTo(ax, hm + 40); c.arc(ax + aw / 2, hm + 40, aw / 2, Math.PI, 0); c.lineTo(ax + aw, hb); c.closePath(); c.fillStyle = "#8d887f"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); }
+  poly(rect2(hx0 - 6, hm - 8, hx1 + 6, hm), "#9d988f", 2);
+  poly(rect2(hx0 + 6, ht, hx1 - 6, hm - 8), "#ddd7cc", 2.2);
+  for (let k = 0; k < 3; k++) { const wx = hx0 + 44 + k * 66; poly(rect2(wx, ht + 18, wx + 22, ht + 52), "#6f6b65", 1.6); line([[wx + 11, ht + 18], [wx + 11, ht + 52]], 1); }
+  poly([[hx0 - 10, ht + 2], [hx0 + 40, ht - 50], [hx1 - 40, ht - 50], [hx1 + 10, ht + 2]], "#77736d", 2.4);
+  poly(rect2(430, ht - 86, 470, ht - 50), "#ddd7cc", 2); poly([[424, ht - 86], [450, ht - 112], [476, ht - 86]], "#77736d", 2); ell(450, ht - 64, 7, 9, "#c9b48c", 1.4);
+  if (!open("the Weaver")) chalkAt(105, gy - 12);
+  if (!open("the Peddler's Market")) chalkAt(262, gy - 12);
+  if (!open("the Barter Stall")) chalkAt(555, gy - 12);
+  if (!open("the Wheelwright")) chalkAt(700, gy - 12);
+  if (!open("the Carriage House")) chalkAt(820, gy - 12);
+  void M;
+}
+function wareAt(k: number, x: number, b: number) {
+  const kind = k % 6;
+  if (kind === 0) { poly([[x - 5, b], [x + 5, b], [x + 6, b - 10], [x + 3, b - 16], [x - 3, b - 16], [x - 6, b - 10]], "#c9b48c", 1.2); line([[x + 6, b - 12], [x + 9, b - 8], [x + 5, b - 4]], 1); }
+  else if (kind === 1) { poly([[x - 7, b], [x + 7, b], [x + 8, b - 10], [x - 8, b - 10]], "#3a3733", 1.2); line([[x - 8, b - 10], [x + 8, b - 10]], 1.6); }
+  else if (kind === 2) { for (let q = 0; q < 3; q++) ell(x, b - 2 - q * 3, 8 - q, 2.4, "#e3dfd8", 1); }
+  else if (kind === 3) { poly([[x - 7, b], [x + 7, b], [x + 8, b - 12], [x - 8, b - 12]], "#c9b48c", 1.2); for (let q = -6; q < 8; q += 4) line([[x + q, b], [x + q, b - 12]], 0.7, "#6f6252"); c.beginPath(); c.arc(x, b - 12, 7, Math.PI, 0); c.lineWidth = 1.2; c.strokeStyle = INK; c.stroke(); }
+  else if (kind === 4) { poly(rect2(x - 2, b - 16, x + 2, b), "#9d988f", 1); ell(x, b, 5, 1.6, "#9d988f", 1); ell(x, b - 16, 4, 1.4, "#9d988f", 1); }
+  else { ell(x, b - 7, 7, 7, "#d7d0c1", 1.2); ell(x, b - 7, 3, 3, null, 0.8); }
+}
+function token(kind: string, x: number, y: number) {
+  if (kind === "sold") ell(x, y, 4, 4, "#c9b48c", 1);
+  else if (kind === "swapped") { ell(x - 2, y, 3.2, 3.2, null, 1.2); ell(x + 2, y, 3.2, 3.2, null, 1.2); }
+  else if (kind === "recycled") poly([[x - 4, y + 3], [x + 4, y + 3], [x, y - 4]], "#aaa59d", 1);
+  else { poly(rect2(x - 4, y - 3, x + 4, y + 3), "#e3dfd8", 1); line([[x, y - 3], [x, y + 3]], 0.8); line([[x - 4, y], [x + 4, y]], 0.8); }
+}
+function wheel(x: number, y: number, r: number, spokes: number, of = 12, lw = 2.4) {
+  ell(x, y, r, r, null, lw); ell(x, y, r - 4, r - 4, null, 1);
+  for (let k = 0; k < of; k++) { const a = (k / of) * Math.PI * 2 - Math.PI / 2; if (k < spokes) line([[x + Math.cos(a) * 4, y + Math.sin(a) * 4], [x + Math.cos(a) * (r - 4), y + Math.sin(a) * (r - 4)]], 1.6, "#6f6252"); else { c.setLineDash([2, 3]); line([[x + Math.cos(a) * 6, y + Math.sin(a) * 6], [x + Math.cos(a) * (r - 6), y + Math.sin(a) * (r - 6)]], 0.8, "#9d988f"); c.setLineDash([]); } }
+  ell(x, y, 4, 4, "#8d7a62", 1.2);
+}
+function cobweb(x: number, y: number, dir: number) { for (let k = 0; k < 4; k++) { const r = 6 + k * 5; c.beginPath(); c.arc(x, y, r, dir > 0 ? 0 : Math.PI / 2, dir > 0 ? Math.PI / 2 : Math.PI); c.lineWidth = 0.6; c.strokeStyle = "#8d887f"; c.stroke(); } for (let k = 0; k < 3; k++) { const a = (dir > 0 ? 0 : Math.PI / 2) + (k / 2) * (Math.PI / 2); line([[x, y], [x + Math.cos(a) * 24, y + Math.sin(a) * 24]], 0.6, "#8d887f"); } }
+function marketThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], { gy } = MS, M = mk(), busy = M.mood !== "quiet", fid = M.fair?.id;
+  // the Weaver: a lean-to with a standing loom, and the crios growing a row for each piece you wear; a darn for each mend
+  if (open("the Weaver")) out.push({ depth: 1, draw: () => {
+    poly(rect2(24, gy - 176, 186, gy), "#cbbfa9", 2); for (let x = 44; x < 186; x += 20) line([[x, gy - 176], [x, gy]], 0.8, "#8d7a62");
+    awning(16, 194, gy - 182, busy);
+    const lx0 = 66, lx1 = 146, top = gy - 150, breast = gy - 34;
+    for (const x of [lx0, lx1]) poly(rect2(x - 4, top - 10, x + 4, gy), "#8d7a62", 1.6);
+    const rowsPer = 22, n = M.belt.length, rolls = Math.floor(n / rowsPer), shown = M.belt.slice(rolls * rowsPer);
+    poly(rect2(lx0 - 6, top - 14, lx1 + 6, top - 6), "#6f6252", 1.6);
+    ell((lx0 + lx1) / 2, top + 2, 40, 6 + Math.min(10, rolls * 2), "#e3dccd", 1.4);
+    for (let x = 96; x <= 124; x += 4) line([[x, top + 6], [x, breast]], 0.7, "#8d887f");
+    [...shown].forEach((ch, i) => {
+      const y = top + 8 + i * 5; poly(rect2(94, y, 126, y + 5), i % 2 ? "#e3dccd" : "#d7cdb9", 0.6, "#8d7a62");
+      if (ch === "c") { if (i % 4 === 0) line([[100, y + 5], [104, y], [108, y + 5], [112, y], [116, y + 5], [120, y]], 0.9); else if (i % 4 === 2) for (let q = 0; q < 4; q++) ell(100 + q * 7, y + 2.5, 1.4, 1.4, "#3a3733"); }
+      else { poly(rect2(106, y - 1, 118, y + 6), "#c9b48c", 0.8); line([[106, y + 1], [118, y + 1]], 0.6); line([[106, y + 4], [118, y + 4]], 0.6); line([[109, y - 1], [109, y + 6]], 0.6); line([[114, y - 1], [114, y + 6]], 0.6); }
+    });
+    poly(rect2(lx0 - 6, breast, lx1 + 6, breast + 8), "#6f6252", 1.6);
+    line([[150, gy - 60], [164, gy - 74]], 3, "#6f6252"); ell(164, gy - 76, 6, 4, "#c9b48c", 1);
+    if (!n) quietText("a row for each piece you wear", 106, top - 22);
+    if (busy) for (let k = 0; k < 2; k++) { const x = 40 + k * 120 + (k ? 0 : 0); if (k === 1) continue; line([[x - 10, gy - 150], [x + 10, gy - 150]], 1); poly([[x - 10, gy - 148], [x + 10, gy - 148], [x + 12, gy - 110], [x - 12, gy - 110]], "#ece8e0", 1.4); }
+    if (fid === "samhain") { ell(176, gy - 160, 9, 8, "#e3dfd8", 1.4); c.globalAlpha = 0.25; ell(176, gy - 160, 18, 16, "#d2483a"); c.globalAlpha = 1; }
+  } });
+  // the Peddler's cart: wares on the bed, and the waiting hook under the canopy: a tag for each want, its moon filling as it waits
+  if (open("the Peddler's Market")) out.push({ depth: 1, draw: () => {
+    const b0 = 206, b1 = 320, bed = gy - 52;
+    line([[b0, bed + 6], [178, gy - 6]], 3, "#6f6252"); line([[b0, bed + 10], [184, gy - 4]], 3, "#6f6252");
+    for (const x of [b0 + 6, (b0 + b1) / 2, b1 - 6]) { c.beginPath(); c.moveTo(x, bed); c.lineTo(x, gy - 132); c.lineWidth = 2; c.strokeStyle = "#6f6252"; c.stroke(); }
+    const canopy: Pt[] = [[b0 - 4, gy - 128], [b0 + 8, gy - 150], [b1 - 8, gy - 150], [b1 + 4, gy - 128]];
+    poly(canopy, busy ? "#ece6d8" : "#d7d0c1", 1.8); if (!busy) for (let x = b0 + 10; x < b1; x += 14) line([[x, gy - 148], [x, gy - 130]], 0.6, "#9d988f");
+    line([[b0 + 2, gy - 120], [b1 - 2, gy - 120]], 2.4, "#6f6252");
+    // the waiting hook
+    for (let k = 0; k < 6; k++) {
+      const hx = b0 + 14 + k * 18; line([[hx, gy - 120], [hx, gy - 114]], 1.4); c.beginPath(); c.arc(hx + 2, gy - 112, 2.4, Math.PI, Math.PI * 2.6); c.lineWidth = 1.2; c.strokeStyle = INK; c.stroke();
+      const w = M.wants[k]; if (!w) continue;
+      const sway = Math.sin(t * 0.9 + k) * 1.5;
+      line([[hx + 2, gy - 110], [hx + 2 + sway, gy - 104]], 0.8);
+      poly(rect2(hx - 5 + sway, gy - 104, hx + 9 + sway, gy - 84), "#efe8da", 1.2);
+      const mx = hx + 2 + sway, my = gy - 94; ell(mx, my, 4.4, 4.4, "#5f5b55", 0.8);
+      if (w.frac >= 1) { ell(mx, my, 4.4, 4.4, "#fbfaf6", 0.8); c.globalAlpha = 0.3; ell(mx, my, 9, 9, "#f3d9a8"); c.globalAlpha = 1; }
+      else { c.save(); c.beginPath(); c.ellipse(mx, my, 4.4, 4.4, 0, 0, Math.PI * 2); c.clip(); c.fillStyle = "#fbfaf6"; c.fillRect(mx + 4.4 - 8.8 * w.frac, my - 5, 8.8 * w.frac, 10); c.restore(); }
+    }
+    if (M.wants.length > 6) quietText(`and ${M.wants.length - 6} more`, (b0 + b1) / 2, gy - 156, 11);
+    // wares on the bed
+    for (let k = 0; k < Math.min(7, M.wares); k++) wareAt(k, b0 + 14 + k * 16, bed);
+    poly(rect2(b0, bed, b1, bed + 10), "#8d7a62", 2); for (let x = b0 + 10; x < b1; x += 12) line([[x, bed], [x, bed + 10]], 0.7, "#6f6252");
+    // the cart's wheel
+    wheel(262, gy - 26, 26, 10, 10, 2.6);
+    if (!M.wares && !M.wants.length) quietText("hang a want on the hook", 262, gy - 160, 11);
+  } });
+  // the market cross, with the cat on the steps on a quiet day
+  out.push({ depth: 0, draw: () => {
+    const x = 410;
+    for (let k = 0; k < 3; k++) poly(rect2(x - 34 + k * 9, gy - 8 - k * 8, x + 34 - k * 9, gy - k * 8), "#bdb8b0", 1.8);
+    poly(rect2(x - 6, gy - 150, x + 6, gy - 24), "#c9c4bb", 2);
+    ell(x, gy - 166, 18, 18, null, 3.4); poly([[x - 8, gy - 190], [x + 8, gy - 190], [x + 6, gy - 142], [x - 6, gy - 142]], "#c9c4bb", 2); poly([[x - 26, gy - 172], [x + 26, gy - 172], [x + 26, gy - 160], [x - 26, gy - 160]], "#c9c4bb", 2);
+    ell(x, gy - 166, 4, 4, null, 1.2);
+    if (!busy) { const cx = x + 18, cy = gy - 24; ell(cx, cy - 6, 9, 6, "#3a3733"); ell(cx + 7, cy - 13, 5, 4.6, "#3a3733"); poly([[cx + 4, cy - 16], [cx + 5, cy - 21], [cx + 7, cy - 16]], "#3a3733", 0); poly([[cx + 8, cy - 16], [cx + 10, cy - 21], [cx + 11, cy - 15]], "#3a3733", 0); c.lineWidth = 2; c.strokeStyle = "#3a3733"; c.beginPath(); c.moveTo(cx - 8, cy - 4); c.quadraticCurveTo(cx - 18, cy + 4, cx - 12, cy + 8); c.stroke();
+      for (let k = 0; k < 3; k++) { const px = 350 + k * 70 + Math.sin(t * 0.7 + k) * 4, py = gy + 20 + k * 6, peck = Math.sin(t * 3 + k * 2) > 0.6 ? 3 : 0; ell(px, py - 5, 6, 4, "#8d887f", 0.8); ell(px + 6, py - 9 + peck, 3, 3, "#6f6b65", 0.8); line([[px - 1, py - 1], [px - 1, py + 2]], 0.8); line([[px + 2, py - 1], [px + 2, py + 2]], 0.8); } }
+    if (fid === "lughnasadh") for (const sx of [x - 52, x + 52]) { for (let k = -3; k <= 3; k++) line([[sx, gy], [sx + k * 4, gy - 40]], 1.4, "#a8977a"); line([[sx - 8, gy - 22], [sx + 8, gy - 22]], 2, "#6f6252"); }
+  } });
+  // Puck Fair's goat, crowned on his tower; the may bush at Bealtaine
+  if (fid === "puck") out.push({ depth: 0.5, draw: () => {
+    const x0 = 340, x1 = 376; for (const x of [x0, x1]) line([[x, gy], [x, gy - 170]], 3, "#6f6252"); for (let y = gy - 20; y > gy - 170; y -= 30) { line([[x0, y], [x1, y - 30]], 1.4, "#6f6252"); line([[x1, y], [x0, y - 30]], 1.4, "#6f6252"); }
+    poly(rect2(x0 - 6, gy - 176, x1 + 6, gy - 168), "#8d7a62", 1.6);
+    const gx = 358, gyy = gy - 176; ell(gx, gyy - 12, 12, 7, "#ece8e0", 1.4); for (const lx of [gx - 8, gx - 3, gx + 4, gx + 9]) line([[lx, gyy - 6], [lx, gyy]], 1.4); ell(gx + 12, gyy - 20, 5, 5, "#ece8e0", 1.2); line([[gx + 12, gyy - 25], [gx + 8, gyy - 32]], 1.4); line([[gx + 14, gyy - 25], [gx + 16, gyy - 32]], 1.4); line([[gx + 14, gyy - 15], [gx + 14, gyy - 11]], 1);
+    poly([[gx + 6, gyy - 26], [gx + 7, gyy - 34], [gx + 10, gyy - 29], [gx + 12, gyy - 35], [gx + 14, gyy - 29], [gx + 17, gyy - 34], [gx + 18, gyy - 26]], "#c9b48c", 1.1);
+  } });
+  if (fid === "bealtaine") out.push({ depth: 0.5, draw: () => {
+    // the may bush, dressed with ribbons and blossom
+    const x = 358; line([[x, gy], [x, gy - 50]], 4); line([[x, gy - 40], [x - 12, gy - 62]], 2.4); line([[x, gy - 44], [x + 12, gy - 64]], 2.4);
+    for (let k = 0; k < 9; k++) ell(x - 16 + h2(k, 3) * 32, gy - 82 + h2(k, 4) * 30, 9, 7, "rgba(143,136,128,.8)", 0.8);
+    for (let k = 0; k < 18; k++) ell(x - 18 + h2(k, 13) * 36, gy - 84 + h2(k, 14) * 32, 1.8, 1.8, "#fbfaf6", 0.5);
+    for (let k = 0; k < 5; k++) { const rx = x - 14 + k * 7, sw = Math.sin(t * 1.4 + k) * 3; line([[rx, gy - 60], [rx + sw, gy - 30]], 1.6, k % 2 ? "#f4f2ed" : "#c9b48c"); }
+  } });
+  // the Barter Stall: a balance of things in and things let go, and the keeping chest of tokens
+  if (open("the Barter Stall")) out.push({ depth: 1, draw: () => {
+    const x0 = 484, x1 = 628, top = gy - 58;
+    poly(rect2(x0 + 6, gy - 170, x1 - 6, top), "#d7cdb9", 1.6);
+    awning(474, 638, gy - 176, busy);
+    poly(rect2(x0, top, x1, top + 8), "#8d7a62", 2); poly(rect2(x0 + 4, top + 8, x1 - 4, gy), "#a8977a", 1.8); for (let x = x0 + 14; x < x1; x += 16) line([[x, top + 8], [x, gy]], 0.7, "#6f6252");
+    // the scale
+    const px = 556, py = gy - 146, tilt = Math.max(-0.28, Math.min(0.28, (M.ins - M.outs) * 0.035)) + Math.sin(t * 0.8) * 0.01;
+    poly(rect2(px - 3, py, px + 3, top), "#8d7a62", 1.4); poly(rect2(px - 14, top - 6, px + 14, top), "#6f6252", 1.4);
+    const L: Pt = [px - Math.cos(tilt) * 40, py + Math.sin(tilt) * 40], R: Pt = [px + Math.cos(tilt) * 40, py - Math.sin(tilt) * 40];
+    line([L, R], 3); ell(px, py, 3.4, 3.4, "#c9b48c", 1);
+    for (const [[ex, ey], items, label] of [[L, M.ins, "in"], [R, M.outs, "out"]] as [Pt, number, string][]) {
+      line([[ex, ey], [ex - 12, ey + 34]], 0.8); line([[ex, ey], [ex + 12, ey + 34]], 0.8);
+      c.beginPath(); c.moveTo(ex - 16, ey + 34); c.quadraticCurveTo(ex, ey + 44, ex + 16, ey + 34); c.closePath(); c.fillStyle = "#c9b48c"; c.fill(); c.lineWidth = 1.4; c.strokeStyle = INK; c.stroke();
+      for (let k = 0; k < Math.min(5, items); k++) { const ix = ex - 10 + (k % 3) * 9, iy = ey + 32 - Math.floor(k / 3) * 6; if (label === "in") poly(rect2(ix - 3, iy - 5, ix + 3, iy), "#e3dfd8", 0.8); else ell(ix, iy - 2, 2.8, 2.8, "#8d7a62", 0.8); }
+      quietText(label, ex, ey + 56, 11);
+    }
+    // the keeping chest, lid up, with a token for each thing let go
+    const cx0 = 590, cx1 = 636, cy = gy - 24;
+    poly([[cx0, cy], [cx1, cy], [cx1 + 4, cy - 18], [cx0 + 4, cy - 18]], "#6f6252", 1.6);
+    const toks = M.tokens.slice(-14); toks.forEach((k2, i) => token(k2, cx0 + 6 + (i % 7) * 6, cy + 4 + Math.floor(i / 7) * 7));
+    poly(rect2(cx0, cy + 2, cx1, gy), "#8d7a62", 2); line([[cx0, cy + 10], [cx1, cy + 10]], 1, "#3a3733"); ell((cx0 + cx1) / 2, cy + 14, 2.4, 2.4, "#c9b48c", 0.8);
+    if (!M.ins && !M.outs) quietText("what comes in, what goes out", 556, gy - 186, 11);
+    if (fid === "samhain") { ell(x1 - 14, top - 10, 9, 8, "#e3dfd8", 1.4); c.globalAlpha = 0.25; ell(x1 - 14, top - 10, 18, 16, "#d2483a"); c.globalAlpha = 1; }
+    if (fid === "imbolc") for (const bx of [x0 + 20, x1 - 20]) { line([[bx - 9, top + 30], [bx + 9, top + 30]], 2.4, "#c9b48c"); line([[bx, top + 21], [bx, top + 39]], 2.4, "#c9b48c"); poly(rect2(bx - 3, top + 27, bx + 3, top + 33), "#a8977a", 1); }
+  } });
+  // the shed: the Wheelwright's bay and the Carriage House
+  if (open("the Wheelwright") || open("the Carriage House")) out.push({ depth: 0.8, draw: () => {
+    const s0 = 652, s1 = 892;
+    poly(rect2(s0, gy - 182, s1, gy), "#c4b8a2", 2); for (let x = s0 + 12; x < s1; x += 16) line([[x, gy - 182], [x, gy]], 0.7, "#8d7a62");
+    poly([[s0 - 12, gy - 178], [s0 + 10, gy - 206], [s1 - 10, gy - 206], [s1 + 8, gy - 178]], "#77736d", 2.2);
+    clipTo([[s0 - 12, gy - 178], [s0 + 10, gy - 206], [s1 - 10, gy - 206], [s1 + 8, gy - 178]], () => { for (let x = s0 - 10; x < s1 + 10; x += 8) line([[x, gy - 206], [x - 3, gy - 178]], 0.8, "#4c4945"); });
+    poly(rect2(748, gy - 182, 756, gy), "#6f6252", 1.6);
+  } });
+  if (open("the Wheelwright")) out.push({ depth: 1, draw: () => {
+    // the wheel on the wall: a spoke set for each time you look after the bike; finished wheels stacked by the post
+    wheel(700, gy - 128, 32, M.bike % 12);
+    for (let k = 0; k < Math.min(4, Math.floor(M.bike / 12)); k++) { ell(736 - k * 3, gy - 18 - k * 2, 14, 14, null, 2); ell(736 - k * 3, gy - 18 - k * 2, 2.6, 2.6, "#8d7a62"); }
+    // the high-wheeler, leaning in
+    const bx = 688, by = gy - 34; ell(bx, by, 32, 32, null, M.bikeRecent ? 3 : 2.2); for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; line([[bx, by], [bx + Math.cos(a) * 30, by + Math.sin(a) * 30]], 0.5, "#8d887f"); }
+    ell(bx, by, 3, 3, "#6f6252"); ell(730, gy - 8, 8, 8, null, 1.8);
+    c.lineWidth = 2.4; c.strokeStyle = INK; c.beginPath(); c.moveTo(bx + 2, by - 32); c.quadraticCurveTo(bx + 40, by - 20, 730, gy - 8); c.stroke();
+    poly([[bx - 4, by - 38], [bx + 10, by - 38], [bx + 8, by - 34], [bx - 2, by - 34]], "#3a3733", 1); line([[bx - 6, by - 30], [bx + 6, by - 30]], 1.6);
+    if (M.bikeRecent) { c.globalAlpha = 0.5 + 0.3 * Math.sin(t * 2); line([[bx - 22, by - 24], [bx - 16, by - 28]], 1.4, "#fbfaf6"); c.globalAlpha = 1; } else cobweb(656, gy - 180, 1);
+    if (!M.bike) quietText("a spoke for each time you tend the bike", 700, gy - 194, 10.5);
+  } });
+  if (open("the Carriage House")) out.push({ depth: 1, draw: () => {
+    // the covered cart: whatever you drive, in the old form. Cared for lately, its lamp is bright; left, it gathers dust
+    const x0 = 774, x1 = 872, b = gy - 44;
+    line([[x0, b + 6], [762, gy - 4]], 3, "#6f6252");
+    poly(rect2(x0, b - 36, x1, b), "#8d7a62", 2); for (let x = x0 + 10; x < x1; x += 14) line([[x, b - 36], [x, b]], 0.7, "#6f6252");
+    c.beginPath(); c.moveTo(x0 + 30, b - 36); c.quadraticCurveTo(x0 + 34, b - 92, x1, b - 84); c.lineTo(x1, b - 36); c.closePath(); c.fillStyle = "#5f5b55"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    for (let k = 1; k < 4; k++) { const u = k / 4; line([[x0 + 30 + u * 40, b - 36], [x0 + 32 + u * 44, b - 86 + u * 4]], 0.8, "#3a3733"); }
+    for (const wx of [x0 + 16, x1 - 16]) wheel(wx, gy - 22, 22, 10, 10, 2.4);
+    poly(rect2(x1 - 2, b - 30, x1 + 8, b - 16), "#c9b48c", 1.2);
+    if (M.carRecent) { c.globalAlpha = 0.35; ell(x1 + 3, b - 23, 12, 10, "#f3d9a8"); c.globalAlpha = 1; line([[x0 + 12, b - 30], [x0 + 22, b - 32]], 1.4, "#e3dccd"); }
+    else { cobweb(888, gy - 180, -1); for (let k = 0; k < 14; k++) ell(x0 + 34 + h2(k, 3) * 60, b - 80 + h2(k, 4) * 40, 1, 1, "#aaa59d"); }
+    if (!M.car) quietText("kept bright by looking after it", 820, gy - 194, 10.5);
+  } });
+  // the crowd: a few on market day, the whole Hollow on a fair day
+  if (busy) out.push({ depth: 2, draw: () => {
+    const xs = fid ? [120, 290, 396, 440, 540, 576, 868] : [396, 440, 540, 576];
+    xs.forEach((x, k) => crowdFig(x, gy + 16 + (k % 2) * 6, t, k, 0.9));
+    if (fid) { for (const [a2, b2] of [[0, 450], [450, 900]] as Pt[]) { const y0 = gy - 236; for (let k = 0; k <= 18; k++) { const u = k / 18, x = a2 + u * (b2 - a2), y = y0 + Math.sin(u * Math.PI) * 26; if (k < 18) poly([[x, y], [x + (b2 - a2) / 18, y0 + Math.sin(((k + 1) / 18) * Math.PI) * 26], [x + (b2 - a2) / 36, y + 16]], ["#f1ece2", "#a8a39b", "#c9b48c"][k % 3], 1); } line([[a2, y0], [a2 + (b2 - a2) / 2, y0 + 26], [b2, y0]], 1); } }
+    if (fid === "horse") [[300, 1], [610, -1]].forEach(([hx, d], k) => {
+      const hy = gy + 140, tone = k ? "#8d887f" : "#5f5b55";
+      // legs, then body, neck and head, mane and tail
+      for (const [lx, ph] of [[-18, 0], [-10, 1], [12, 2], [20, 3]]) { const sw = Math.sin(t * 0.8 + ph + k) * 1; line([[hx + d * lx, hy - 16], [hx + d * lx + sw, hy - 2]], 3, tone); line([[hx + d * lx + sw - 2, hy - 1], [hx + d * lx + sw + 2, hy - 1]], 2.4, "#2a2724"); }
+      ell(hx, hy - 24, 28, 12, tone, 1.8);
+      poly([[hx + d * 18, hy - 30], [hx + d * 30, hy - 52], [hx + d * 38, hy - 50], [hx + d * 28, hy - 24]], tone, 1.6);
+      poly([[hx + d * 28, hy - 54], [hx + d * 46, hy - 46], [hx + d * 46, hy - 40], [hx + d * 32, hy - 44]], tone, 1.6); ell(hx + d * 34, hy - 50, 1.4, 1.4, "#f4f2ed");
+      line([[hx + d * 30, hy - 56], [hx + d * 32, hy - 60]], 1.6); line([[hx + d * 20, hy - 34], [hx + d * 30, hy - 54]], 3, "#2a2724");
+      c.lineWidth = 3; c.strokeStyle = "#2a2724"; c.beginPath(); c.moveTo(hx - d * 27, hy - 28); c.quadraticCurveTo(hx - d * 38, hy - 22, hx - d * 34, hy - 8); c.stroke();
+      line([[hx + d * 44, hy - 42], [hx + d * 60, hy - 6]], 1, "#6f6252"); line([[hx + d * 56, hy - 8], [hx + d * 64, hy - 8]], 3, "#6f6252");
+    });
+    if (fid === "lammas") { const lx = 610, ly = gy + 140; poly(rect2(lx - 30, ly - 26, lx + 30, ly - 10), "#8d7a62", 1.6); wheel(lx - 18, ly - 6, 8, 6, 6, 1.4); wheel(lx + 18, ly - 6, 8, 6, 6, 1.4); poly(rect2(lx - 24, ly - 36, lx - 2, ly - 26), "#e8c76a", 1.2); for (let k = 0; k < 4; k++) ell(lx + 6 + k * 5, ly - 30, 3, 5, "#6f6252", 0.8); quietText("yellowman & dulse", lx, ly + 16, 11); }
+  } });
+  return out;
+}
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function marketFront() {
+  const M = mk(), words = M.mood === "fair" && M.fair ? `${M.fair.name}. The whole Hollow is in the square.` : M.mood === "market" ? `${DAY_NAMES[M.dow]} is market day. The awnings are out.` : `${DAY_NAMES[M.dow]}. The stalls are furled; market day is ${DAY_NAMES[M.day]}.`;
+  c.font = `italic 14px 'IM Fell English', Georgia, serif`; c.fillStyle = "#3a3733"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText(words, MS.w / 2, MS.h - 14);
+}
+const marketBand = (i: number): [number, number, number, number] => [[10, 194], [194, 340], [470, 646], [648, 752], [752, 895]].map(([a, b2]) => [a, MS.gy - 210, b2, MS.gy + 24] as [number, number, number, number])[i];
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -1085,6 +1345,12 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     hit: (x, y) => [1, 0, 2, 3].find((i) => { const [a, b, c2, d] = feastBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
     stand: (i) => i === 0 ? [300, FH.gy + 2, 0.6] : i === 1 ? [520, FH.gy + 2, 0.6] : i === 2 ? [190, FH.gy - 22, 0.6] : [680, FH.gy + 2, 0.6],
     labelAt: (i) => i === 0 ? [410, FH.gy + 40] : i === 1 ? [300, FH.beam - 24] : i === 2 ? [150, FH.gy + 40] : [680, FH.gy + 40],
+  },
+  "market-square": {
+    spots: MARKET_SPOTS, still: marketStill, things: marketThings, front: marketFront, size: [MS.w, MS.h],
+    hit: (x, y) => [0, 1, 2, 3, 4].find((i) => { const [a, b, c2, d] = marketBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
+    stand: (i) => [[184, MS.gy + 8, 0.6], [344, MS.gy + 8, 0.6], [470, MS.gy + 8, 0.6], [664, MS.gy + 8, 0.6], [758, MS.gy + 8, 0.6]][i] as [number, number, number],
+    labelAt: (i) => [[100, MS.gy + 48], [262, MS.gy + 76], [556, MS.gy + 48], [700, MS.gy + 76], [810, MS.gy + 48]][i] as Pt,
   },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],
