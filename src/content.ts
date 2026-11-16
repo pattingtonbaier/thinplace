@@ -48,9 +48,23 @@ export const BUILDINGS: Building[] = [
   { id: "wildwood", name: "The Wildwood", blurb: "The Glasshouse, the Wort Garden and the lake.", embers: ["O", "B"] },
   { id: "feasting-halls", name: "The Feasting Halls", blurb: "Restaurants, Fidchell Hall and the Moot Hall.", embers: ["F", "E"] },
   { id: "market-square", name: "The Market Square", blurb: "The Weaver, the Peddler's Market and the Barter Stall.", embers: ["E"] },
-  { id: "healing-well", name: "The Healing Well", blurb: "Therapy, the Apothecary, the Moon Garden and the Stone Circle. Every room is safe and private.", embers: ["N"] },
+  { id: "healing-well", name: "The Healing Well", blurb: "The Moon Garden's rounds, the Two Stones, the Still-room and the Seaweed Baths. Every room is safe and private, and most of what you leave here fades.", embers: ["N"] },
   { id: "raven-post", name: "The Raven Post", blurb: "Letters and admin, the Steward's desk and the Treasury.", embers: ["R"] },
 ];
+
+// The Dinnseanchas, the lore of places: what each place keeps, and what moves it. Read at the Scriptorium in the Bothy.
+export const LORE: Partial<Record<BuildingId, { keeps: string; moves?: string }>> = {
+  "bothy": { keeps: "Home. Walk its rooms; sit at the hearth desk for the working table: the day-book, the tally stick, the ember stones, the moons, the relics, the crane bag and the cairn.", moves: "The candle on the table burns down to your day's end." },
+  "stone-field": { keeps: "Standing stones for training, the Sweat House with its plunge trough, and the stile to the Old Roads." },
+  "ogham-tower": { keeps: "A floor for each subject you learn, the Hedge Library and the Whispering Well. Each book you finish cuts the next Ogham letter into the bell beam and rings the bell." },
+  "forge": { keeps: "A forged piece hung on the wall of work for each project you ship. The Guild room upstairs, Repairs in the lean-to.", moves: "The forge fire is never out." },
+  "craft-hall": { keeps: "The Kiln, the Builder's Bench, the illuminator's desk and the Camera Obscura on the ridge, each made the first time you use it." },
+  "bards-lane": { keeps: "A lamp lit down the lane, with its poem hung below, for each poem you write. The Song Cellar and the Shadow Theatre." },
+  "wildwood": { keeps: "A bell jar in the Glasshouse for each nature find, labelled bird, plant, flower, creature or stone. The Wort Garden's beds, the hawthorn and the lake.", moves: "Follows the real seasons. Mist and a turnip lantern at Samhain." },
+  "feasting-halls": { keeps: "A mether cup on the wall pegs for each friend, by initials or nickname. An inn sign for each place you eat, brighter the more you go back. A peg in the Fidchell board for each game night. A notch on the Moot Hall's hazel tally for each time you serve. A seat by the door kept empty for the stranger.", moves: "Follows the real clock: swept in the morning, banked in the evening, full on Friday and Saturday nights." },
+  "market-square": { keeps: "A row on the Weaver's belt for each piece you wear, a darn for each mend. The waiting hook: hang a want for a moon before you buy it. The Barter Stall's scale of things in and things let go, and the keeping chest. A spoke in the Wheelwright's wheel for each time you tend the bike. The cart in the Carriage House, bright when cared for.", moves: "Opens on your market day and on the old fair days, under the fair glove." },
+  "healing-well": { keeps: "Most things here fade. A rag on the thorn for each visit, gone in a moon; words tied to it go on the wind and come back later. The rounds: seven stations sunwise, and a white quartz pebble for each round. Herbs drying in the Still-room, a shawl on the far stone of the Two Stones, wrack on the line by the Seaweed Baths.", moves: "Follows the real moon. A candle at the dark of the moon; silver water at the full. The trout rises only now and then." },
+};
 
 // Buildings 2 to 11 open at these levels (the opening schedule in the framework).
 export const OPEN_LEVELS = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
@@ -121,8 +135,9 @@ export const ACTIONS: Action[] = [
   A("car-care", "Looked after the car", "market-square", "the Carriage House", "growth", 10, "R", ["car", "oil change", "car wash", "car service", "mechanic"]),
 
   A("meditate", "Meditation or breathwork", "healing-well", "the Moon Garden", "growth", 15, "N", ["meditate", "breathe", "breathwork"]),
-  A("therapy", "Therapy session", "healing-well", "Therapy", "growth", 25, "N", ["therapy", "counselling"], true),
-  A("appointment", "Health appointment", "healing-well", "the Apothecary", "growth", 15, "N", ["doctor", "dentist", "appointment", "checkup"], true),
+  A("therapy", "Therapy session", "healing-well", "the Two Stones", "growth", 25, "N", ["therapy", "counselling", "counseling"], true),
+  A("appointment", "Health appointment", "healing-well", "the Still-room", "growth", 15, "N", ["doctor", "dentist", "appointment", "checkup", "physio"], true),
+  A("seaweed", "Seaweed bath, spa or long soak", "healing-well", "the Seaweed Baths", "growth", 15, "N", ["spa", "bath", "soak", "seaweed", "hot tub", "massage"]),
 
   A("admin", "Life admin", "raven-post", "the Steward's desk", "growth", 15, "R", ["admin", "errand", "email", "bills", "paperwork"]),
   A("budget", "Budget check-in", "raven-post", "the Treasury", "growth", 15, "R", ["budget", "money", "finances"]),

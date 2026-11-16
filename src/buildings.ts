@@ -163,10 +163,10 @@ export function drawBuilding(k: Kit, id: BuildingId, rooms: Rooms, t: number, al
     }
     case "healing-well": {
       if (has("the Moon Garden")) for (let q = 0; q < 7; q++) { const ang = (q / 7) * Math.PI * 2; const p = P(Math.cos(ang) * 1.05, Math.sin(ang) * 1.05); poly([[p[0] - 3, p[1]], [p[0] + 3, p[1]], [p[0] + 2.5, p[1] - 12], [p[0] - 2.5, p[1] - 11]], "#d9d5ce", 1.3); }
-      if (has("Therapy")) { const hp = 0; void hp; }
+      if (has("the Two Stones")) { const hp = 0; void hp; }
       k.well(0, 0);
-      if (has("the Apothecary")) { const p = P(0.95, 0.6); for (let q = 0; q < 3; q++) { const x = p[0] - 8 + q * 8; poly([[x - 2.5, p[1]], [x + 2.5, p[1]], [x + 2.5, p[1] - 9], [x + 1, p[1] - 12], [x - 1, p[1] - 12], [x - 2.5, p[1] - 9]], q === 1 ? "#cfcac2" : "#e9e6df", 1.1); } }
-      if (has("Therapy")) k.bench(-0.9, 0.7);
+      if (has("the Still-room")) { const p = P(0.95, 0.6); for (let q = 0; q < 3; q++) { const x = p[0] - 8 + q * 8; poly([[x - 2.5, p[1]], [x + 2.5, p[1]], [x + 2.5, p[1] - 9], [x + 1, p[1] - 12], [x - 1, p[1] - 12], [x - 2.5, p[1] - 9]], q === 1 ? "#cfcac2" : "#e9e6df", 1.1); } }
+      if (has("the Two Stones")) k.bench(-0.9, 0.7);
       k.mushrooms(-0.7, -0.8, 2);
       return 74;
     }

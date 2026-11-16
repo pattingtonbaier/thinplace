@@ -2,15 +2,15 @@ import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
 import { attachBothy, placeAt, STATIONS } from "./bothy";
 import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table";
-import { attachInterior, hasScene, sceneRooms, seasonOf, fairOn, type Season, type Market } from "./interiors";
+import { attachInterior, hasScene, sceneRooms, seasonOf, fairOn, type Season, type Market, type Well } from "./interiors";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
-  RELIC_BY_ID, relicsAt, type Relic, type Action, type BuildingId, type Ember,
+  RELIC_BY_ID, relicsAt, LORE, OPEN_LEVELS, type Relic, type Action, type BuildingId, type Ember,
 } from "./content";
 import {
   addDays, dayKey, derive, lastNewMoon, EMBER_STEP, habitTicks, isOpen, levelFromXP, pointsSpent, searchActions, START_CAP, START_POINTS,
-  startEmbers, uid, weekStart, WAIT_DAYS, type Derived, type Habit, type Log, type Profile, type Save, type Want,
+  startEmbers, uid, weekStart, WAIT_DAYS, RAG_DAYS, TURNING_DAYS, fadeRags, windDue, type Wind, type Derived, type Habit, type Log, type Profile, type Save, type Want,
 } from "./engine";
 import { exportBackup, getPage, importBackup, load, persist, pressPhoto, putPage, save } from "./store";
 import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForDay, PROMPTS, suggestCalling, suggestPoints } from "./quiz";
@@ -19,7 +19,7 @@ import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForD
 type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
-  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind" | "who" | "where" | "letgo"
+  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind" | "who" | "where" | "letgo" | "lore"
   | { found: BuildingId } | { level: number } | { relic: { ember: Ember; tier: number; swap?: boolean } };
 
 const st = {
@@ -65,6 +65,7 @@ const glowSize = () => Math.min(1.35, 0.7 + st.d.level * 0.035);
 
 async function commit() {
   const before = st.d;
+  fadeRags(st.s, Date.now());
   st.d = derive(st.s);
   if (before) {
     for (const up of st.d.levelUps.slice(before.levelUps.length)) {
@@ -178,7 +179,7 @@ function insideView(id: BuildingId) {
       <div class="inhead"><h2>${esc(b.name)}</h2><button class="ghost" data-act="leave">Leave</button></div>
       <canvas id="interior" role="application" aria-label="${esc(b.name)}, in cutaway. Tap a part of it to go there."></canvas>
       <div class="chips wrap rooms-tabs" role="tablist">${rs.map((r, k) => `<button class="chip ${k === i ? "on" : ""}" role="tab" aria-selected="${k === i}" data-act="station" data-arg="${k}">${esc(r[0].toUpperCase() + r.slice(1))}</button>`).join("")}</div>
-      <section class="card station"><h3>${esc(room[0].toUpperCase() + room.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.filter((a) => a.id !== "kept-back").map(actionRow).join("")}</ul>${id === "market-square" && room === "the Peddler's Market" ? hookBlock() : ""}</section></section>`;
+      <section class="card station"><h3>${esc(room[0].toUpperCase() + room.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}<ul class="actions">${acts.filter((a) => a.id !== "kept-back").map(actionRow).join("")}</ul>${id === "market-square" && room === "the Peddler's Market" ? hookBlock() : ""}${id === "healing-well" && room === "the Moon Garden" ? ragBlock() : ""}</section></section>`;
   }
   const rooms = roomsOf(id), i = Math.min(st.station, rooms.length - 1), room = rooms[i];
   const look = lookToOpts(st.s.profile!.look, glowSize());
@@ -211,7 +212,8 @@ function stationCard(id: string | null): string {
   const acts = ACTIONS.filter((a) => a.building === "bothy" && a.room === s.room);
   const fams = st.s.familiars ?? [];
   const famLine = s.id === "pen" && fams.length ? `<p class="quiet">${fams.map((f) => `${esc(f.name)} the ${f.kind}`).join(", ")}.</p>${fams.length < 3 ? `<button class="link" data-act="fam-add">Another familiar</button>` : ""}` : "";
-  return `<h3>${esc(s.name[0].toUpperCase() + s.name.slice(1))}</h3>${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}${famLine}<ul class="actions">${acts.map(actionRow).join("")}</ul>${s.id === "oak" ? `<button class="ghost wide" data-act="leave-bothy">Leave the Bothy</button>` : ""}`;
+  const loreBtn = s.id === "nook" ? `<p class="quiet">On the lectern: the Dinnseanchas, the lore of places. What you've found, what each place keeps, and the days that move them.</p><button class="primary wide" data-act="sheet" data-arg="lore">Read the lore of places</button>` : "";
+  return `<h3>${esc(s.name[0].toUpperCase() + s.name.slice(1))}</h3>${loreBtn}${made ? "" : `<p class="quiet">Not made yet. Log here once and it's built.</p>`}${famLine}<ul class="actions">${acts.map(actionRow).join("")}</ul>${s.id === "oak" ? `<button class="ghost wide" data-act="leave-bothy">Leave the Bothy</button>` : ""}`;
 }
 function bothyView() {
   if (st.bothy === "table") return tableView();
@@ -229,11 +231,11 @@ function tableView() {
     <details class="plain"><summary>What's on the table</summary><ul class="blist">${SPOTS.filter((x) => x.id !== "notes" || hasNotes()).map((x) => `<li><button class="brow" data-act="spot" data-arg="${x.id}"><b>${esc(x.label.split(":")[0])}</b><span>${esc(x.label.split(":")[1]?.trim() ?? "")}</span></button></li>`).join("")}</ul></details>
   </section>`;
 }
-function hasNotes() { return tasks() !== "" || readyWants().length > 0 || gleaningDue() || pendingRelics().length > 0 || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
+function hasNotes() { return tasks() !== "" || readyWants().length > 0 || dueWinds().length > 0 || gleaningDue() || pendingRelics().length > 0 || (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled); }
 function tableData(): TableData {
   const t = today(), now = new Date();
   const samhain = (now.getMonth() === 9 && now.getDate() === 31) || (now.getMonth() === 10 && now.getDate() === 1);
-  const day = (st.d.byDay[t] ?? []).map((l) => ({ name: ACTION_BY_ID[l.action]?.name ?? l.action }));
+  const day = (st.d.byDay[t] ?? []).map((l) => ({ name: logName(l) }));
   const since = Date.now() - 30 * 864e5;
   const notches = new Set(st.s.logs.filter((l) => !l.deleted && (l.habit || st.d.awards[l.id]?.rhythm) && l.ts > since).map((l) => (l.habit ?? l.action) + dayKey(l.ts, st.s.settings.cutoffHour))).size;
   const moons = Array.from({ length: 28 }, (_, k) => { const dk = addDays(t, k - 27); return (st.d.byDay[dk]?.length ?? 0) > 0 || !!st.s.journal[dk]; });
@@ -353,12 +355,14 @@ function tasks() {
     `<li><button class="task" data-act="task" data-arg="${k}"><span class="dot ${k === "backup" ? "red" : ""}" aria-hidden="true"></span><b>${t}</b><small>${sub}</small></button></li>`).join("")}</ul></section>`;
 }
 
+// Private rooms (therapy, health) are veiled on the day lists: they show only as a visit to the well.
+function logName(l: Log) { const a = ACTION_BY_ID[l.action]; return a?.private ? "A visit to the Healing Well" : a?.name ?? l.action; }
 function todayLogs() {
   const logs = (st.d.byDay[today()] ?? []).slice().reverse();
   if (!logs.length) return `<p class="quiet">Nothing logged yet today. The ＋ Log button works from anywhere.</p>`;
   return `<ul class="logs">${logs.map((l) => {
     const a = ACTION_BY_ID[l.action], aw = st.d.awards[l.id];
-    return `<li><span class="lt">${new Date(l.ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span><b>${esc(a?.name ?? l.action)}</b>${l.note ? `<em>${esc(l.note)}</em>` : ""}<span class="lx">${aw?.xp ? "+" + aw.xp : "·"}</span><button class="x" data-act="del" data-arg="${l.id}" aria-label="Remove ${esc(a?.name ?? "log")}">×</button></li>`;
+    return `<li><span class="lt">${new Date(l.ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span><b>${esc(logName(l))}</b>${l.note ? `<em>${esc(l.note)}</em>` : ""}<span class="lx">${aw?.xp ? "+" + aw.xp : "·"}</span><button class="x" data-act="del" data-arg="${l.id}" aria-label="Remove ${esc(a?.name ?? "log")}">×</button></li>`;
   }).join("")}</ul>`;
 }
 
@@ -448,11 +452,12 @@ function bookSheet() {
   }).join("");
   const gl = (st.s.gleanings ?? []).slice().reverse().map((g) => `<section class="card glean"><h3>${new Date(g.written).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3>${g.lines.map((x) => `<p>“${esc(x)}”</p>`).join("")}</section>`).join("");
   const books = (st.s.books ?? []).map((b) => `<li><b>Book ${roman(b.n)}</b>, begun ${fmtDate(b.started)}${b.finished ? `, finished ${fmtDate(b.finished)}` : ", in use"}.</li>`).join("");
-  return sheetWrap("The Field Book", `<p class="label">Places you've found</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}
+  const winds = (st.s.winds ?? []).filter((w) => w.answers?.length).slice().reverse().map((w) => `<section class="card wind"><h3>Tied ${fmtDate(w.tied)} ${new Date(w.tied).getFullYear()}</h3><p class="was">“${esc(w.words)}”</p>${(w.answers ?? []).map((a) => `<p class="label">${fmtDate(a.due)} ${new Date(a.due).getFullYear()}</p>${a.now ? `<p><i>Where I am:</i> ${esc(a.now)}</p>` : ""}${a.going ? `<p><i>Where I'm going:</i> ${esc(a.going)}</p>` : ""}${!a.now && !a.going ? `<p class="quiet">It blew past.</p>` : ""}`).join("")}</section>`).join("");
+  return sheetWrap("The Field Book", `${winds ? `<p class="label">Words on the wind</p><p class="quiet">What you tied to the thorn, and what you said when it came back.</p>${winds}` : ""}<p class="label">Places you've found</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}
     ${st.s.settings.paper ? `<p class="label">Gleanings from your notebooks</p>${gl || `<p class="quiet">At each new moon, the table asks you to copy a few lines from the month's pages in here.</p>`}<button class="ghost wide" data-act="glean">Glean now</button>${books ? `<p class="label">Your notebooks</p><ul class="found">${books}</ul>` : ""}` : ""}`);
 }
 function notesSheet() {
-  return sheetWrap("A slip of reminders", `${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${readyWants().map((w) => `<section class="card"><h3>The peddler is here</h3><p>"${esc(w.name)}" has hung on the waiting hook a whole moon. Do you still want it?</p>${wantButtons(w)}</section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
+  return sheetWrap("A slip of reminders", `${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${dueWinds().map(({ w, due }) => windCard(w, due)).join("")}${readyWants().map((w) => `<section class="card"><h3>The peddler is here</h3><p>"${esc(w.name)}" has hung on the waiting hook a whole moon. Do you still want it?</p>${wantButtons(w)}</section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">Nothing to remember. The slip is gone from the wall.</p>`}`);
 }
 
 // ---------- sheets ----------
@@ -637,6 +642,83 @@ function marketCounts(): Market {
     tokens: of("let-go").map((l) => l.how ?? "gave"), bike: of("bike-care").length, bikeRecent: recent("bike-care"), car: of("car-care").length, carRecent: recent("car-care"),
     mood, fair: mood === "fair" ? (fid ? fairOn(null, fid) : fair) ?? fairOn(null, "lughnasadh") : null, dow, day,
   };
+}
+
+// ---------- the Healing Well: the rag tree, the winds, the moon ----------
+const moonAge = (ts = Date.now()) => (ts - lastNewMoon(ts)) / (29.530588853 * DAY_MS);
+const isImbolc = (d = new Date()) => (d.getMonth() === 0 && d.getDate() === 31) || (d.getMonth() === 1 && d.getDate() === 1);
+function dueWinds(): { w: Wind; due: { ts: number; name: string } }[] {
+  return (st.s.winds ?? []).map((w) => ({ w, due: windDue(w, Date.now()) })).filter((x): x is { w: Wind; due: { ts: number; name: string } } => !!x.due);
+}
+function windCard(w: Wind, due: { ts: number; name: string }) {
+  return `<section class="card wind"><h3>A wind off the well</h3><p class="quiet">${due.name === "a year to the day" ? "A year ago today" : `On ${fmtDate(w.tied)}`}, you tied this to the thorn. It's come back on ${esc(due.name)}.</p><p class="was">“${esc(w.words)}”</p>
+    <label class="field"><span class="label">Where are you now?</span><textarea data-input="wind-now-${w.id}" rows="2" placeholder="A line is plenty"></textarea></label>
+    <label class="field"><span class="label">Where are you going?</span><textarea data-input="wind-going-${w.id}" rows="2" placeholder="Or leave it blank"></textarea></label>
+    <button class="primary wide" data-act="wind-answer" data-arg="${w.id}:${due.ts}">Let it blow on</button></section>`;
+}
+function ragBlock() {
+  const rags = (st.s.rags ?? []).slice().reverse();
+  return `<section class="hook"><h4>The rag tree</h4><p class="quiet">Each visit here ties a rag to the thorn, and it fades over a moon. You can tie words to one: what's weighing on you. When the rag fades they go on the wind, and come back to you later, on a turning day and a year on.</p>
+    ${rags.length ? `<ul class="blist">${rags.map((r) => { const left = Math.ceil(RAG_DAYS - (Date.now() - r.tied) / DAY_MS); return `<li class="want"><b class="fading" style="opacity:${(0.35 + 0.65 * (left / RAG_DAYS)).toFixed(2)}">${esc(r.words)}</b><span>${left} ${left === 1 ? "night" : "nights"} on the thorn</span></li>`; }).join("")}</ul>` : ""}
+    <label class="field"><span class="label">Words for a rag</span><textarea data-input="rag" rows="2" maxlength="280" placeholder="Only you will read this, and only once more"></textarea></label>
+    <button class="primary wide" data-act="rag-tie">Tie it to the thorn</button></section>`;
+}
+function wellCounts(): Well {
+  const q = new URLSearchParams(location.search), now = Date.now(), L = live();
+  const at = (id: string, days: number) => L.filter((l) => l.action === id && now - l.ts < days * DAY_MS).map((l) => (now - l.ts) / (days * DAY_MS));
+  const well = L.filter((l) => ACTION_BY_ID[l.action]?.building === "healing-well");
+  const rags = [...well.filter((l) => now - l.ts < RAG_DAYS * DAY_MS).map((l) => ({ ts: l.ts, worded: false })), ...(st.s.rags ?? []).map((r) => ({ ts: r.tied, worded: true }))]
+    .sort((a, b) => a.ts - b.ts).map((r) => ({ age: (now - r.ts) / (RAG_DAYS * DAY_MS), worded: r.worded }));
+  const med = L.filter((l) => l.action === "meditate").length;
+  const therapy = L.filter((l) => l.action === "therapy").slice(-1)[0], shawlDays = therapy ? (now - therapy.ts) / DAY_MS : null;
+  const phase = q.has("moon") ? +q.get("moon")! : moonAge();
+  const last = well.slice(-1)[0], prev = well.slice(-2, -1)[0];
+  const comeback = !!last && now - last.ts < 2 * DAY_MS && (!prev || last.ts - prev.ts >= 14 * DAY_MS);
+  return {
+    phase, rags, step: med % 7, quartz: Math.floor(med / 7), shawl: shawlDays !== null && shawlDays < 14 ? shawlDays : null,
+    herbs: at("appointment", 42), weed: at("seaweed", 28), steam: L.some((l) => l.action === "seaweed" && now - l.ts < 3 * DAY_MS),
+    trout: q.has("trout") || Math.abs(phase - 0.5) < 0.05 || comeback, imbolc: q.has("imbolc") || isImbolc(),
+  };
+}
+// ---------- the Dinnseanchas: the lore of places, kept at the Scriptorium ----------
+function loreSheet() {
+  const md = st.s.settings.marketDay ?? 6, DAYN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const found = (id: BuildingId) => isOpen(st.d, id);
+  const places = BUILDINGS.map((b, i) => {
+    const lore = LORE[b.id];
+    if (!found(b.id)) return `<li class="lore dim"><b>A place still in the mist</b><span>Drawn in at level ${OPEN_LEVELS[i] ?? "?"}.</span></li>`;
+    const rooms = Object.keys(st.d.rooms[b.id] ?? {});
+    return `<li class="lore"><b>${esc(b.name)}</b><p>${esc(lore?.keeps ?? b.blurb)}</p>${lore?.moves ? `<p class="quiet">${esc(lore.moves)}</p>` : ""}${rooms.length ? `<p class="label">Rooms made</p><p>${rooms.map((r) => esc(r)).join(", ")}.</p>` : ""}</li>`;
+  }).join("");
+  const ways: string[] = [];
+  if (st.d.rhythms.length) ways.push(`<li><b>Rhythms.</b> Things you do on five of seven days earn a quarter of their worth each day, and a full log's worth for every whole week kept.</li>`);
+  if (st.s.settings.paper) ways.push(`<li><b>The paper journal.</b> Your journal lives in your notebook; the table keeps the book and page, a kept line, and the gleaning at each new moon.</li>`);
+  if ((st.s.familiars ?? []).length) ways.push(`<li><b>Familiars.</b> ${(st.s.familiars ?? []).map((f) => `${esc(f.name)} the ${f.kind}`).join(", ")}, in the pen in the yard.</li>`);
+  for (const rl of ownedRelics()) { ways.push(`<li><b>${esc(rl.name)}.</b> ${esc(rl.effect)}</li>`); }
+  if (found("market-square")) ways.push(`<li><b>The waiting hook.</b> Hang a want for a moon. Bring it home after and waiting earns ${10} Resolve; let it go and that counts too.</li>`);
+  if (found("healing-well")) ways.push(`<li><b>The rag tree and the winds.</b> Words tied to the thorn fade after a moon and go on the wind. They come back on the first turning day a season on, and again a year to the day: where you were, where you are, where you're going.</li>`);
+  const days: [string, string, boolean][] = [
+    ["Each new moon", "The gleaning, if you keep a paper journal. The Healing Well's candle is lit.", true],
+    ["Each full moon", "The well's water goes to silver, and the trout may rise.", found("healing-well")],
+    ["Friday and Saturday nights", "The Feasting Halls are full.", found("feasting-halls")],
+    [`${DAYN[md]}s`, "Market day: the fair glove goes up in the Market Square.", found("market-square")],
+    ["1 February, Imbolc", "Brigid's day. The Healing Well is dressed; the Imbolc fair opens the Market Square.", true],
+    ["Around 20 March", "The spring equinox, a turning day.", true],
+    ["1 May, Bealtaine", "The may bush is dressed at the Bealtaine fair.", true],
+    ["Around 21 June", "Midsummer, a turning day.", true],
+    ["1 August, Lughnasadh", "The harvest fair, sheaves at the glove.", true],
+    ["10 to 12 August", "Puck Fair: the goat is crowned on his tower.", found("market-square")],
+    ["The last Monday and Tuesday of August", "The Ould Lammas Fair: yellowman and dulse.", found("market-square")],
+    ["Around 22 September", "The autumn equinox, a turning day.", true],
+    ["1 to 7 October", "The Ballinasloe horse fair.", found("market-square")],
+    ["31 October to 1 November, Samhain", "Mist and a turnip lantern in the Wildwood, the Samhain fair, and the one night a year a relic can be swapped.", true],
+    ["Around 21 December", "Midwinter, a turning day.", true],
+  ];
+  void TURNING_DAYS;
+  return sheetWrap("The Dinnseanchas", `<p class="blurb">The lore of places: what you've found in the Hollow, what each place keeps, and the days that move them.</p>
+    <p class="label">The places</p><ul class="blist lorelist">${places}</ul>
+    ${ways.length ? `<p class="label">The ways of the Hollow</p><ul class="blist lorelist">${ways.join("")}</ul>` : ""}
+    <p class="label">The turning of the year</p><ul class="blist lorelist days">${days.filter((d) => d[2]).map(([w, what]) => `<li><b>${esc(w)}</b><span>${esc(what)}</span></li>`).join("")}</ul>`);
 }
 
 // ---------- familiars ----------
@@ -894,6 +976,7 @@ function sheet() {
     <div class="chips wrap">${["bird", "plant", "flower", "creature", "stone"].map((k) => `<button class="chip" data-act="find-kind" data-arg="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
     <button class="ghost wide" data-act="find-kind" data-arg="">Just a find</button>`);
   if (sh === "who") return whoSheet();
+  if (sh === "lore") return loreSheet();
   if (sh === "letgo") return letGoSheet();
   if (sh === "where") return whereSheet();
   if (sh === "glean") return gleanSheet();
@@ -987,7 +1070,7 @@ function render() {
   if (document.getElementById("table")) attachTable();
   const icv = document.getElementById("interior") as HTMLCanvasElement | null;
   if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4, { finished: st.s.logs.filter((l) => !l.deleted && l.action === "finish-book").length, shipped: st.s.logs.filter((l) => !l.deleted && l.action === "ship").length, poems: st.s.logs.filter((l) => !l.deleted && l.action === "poem").length,
-    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain"), hall: hallCounts(), market: marketCounts() });
+    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain"), hall: hallCounts(), market: marketCounts(), well: wellCounts() });
   document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
@@ -1047,6 +1130,19 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       st.sheet = null; nextSheet(); render(); return;
     }
     case "market-day": st.s.settings = { ...st.s.settings, marketDay: Number(arg), updated: Date.now() }; await commit(); break;
+    case "rag-tie": {
+      const words = ((document.querySelector("[data-input=rag]") as HTMLTextAreaElement)?.value ?? "").trim();
+      if (!words) { toast("Write a few words first, or none and just visit."); return; }
+      (st.s.rags ??= []).push({ id: uid(), tied: Date.now(), words }); await commit();
+      toast("Tied to the thorn. It fades in a moon, and the wind keeps the words."); break;
+    }
+    case "wind-answer": {
+      const [wid, due] = arg.split(":"), w = (st.s.winds ?? []).find((x) => x.id === wid); if (!w) break;
+      const v = (k: string) => ((document.querySelector(`[data-input="wind-${k}-${wid}"]`) as HTMLTextAreaElement)?.value ?? "").trim() || undefined;
+      (w.answers ??= []).push({ due: Number(due), at: Date.now(), now: v("now"), going: v("going") }); await commit();
+      if (st.sheet === "notes" && !hasNotes()) st.sheet = null;
+      toast("It blows on. Your answer is in the Field Book."); break;
+    }
     case "who-toggle": { const v = arg; st.whoDraft = st.whoDraft.includes(v) ? st.whoDraft.filter((x) => x !== v) : [...st.whoDraft, v]; break; }
     case "who-done": case "who-skip": {
       const typed = act === "who-done" ? ((document.querySelector("[data-input=who]") as HTMLInputElement)?.value ?? "").split(/[,&]| and /).map((x) => x.trim()).filter(Boolean) : [];
@@ -1301,6 +1397,7 @@ async function onPress(input: HTMLInputElement) {
 
 export async function start() {
   st.s = await load();
+  if (fadeRags(st.s, Date.now())) await save(st.s);
   st.d = derive(st.s);
   render();
   document.addEventListener("click", (e) => {

@@ -295,3 +295,16 @@ img.pressed { display: block; max-width: 100%; border: 2px solid var(--ink); mar
 .hook li.want b { flex: 1 1 auto; min-width: 0; }
 .hook li.want span { color: var(--soft); font-style: italic; }
 .hook li.want .row2, .hook li.want .wide { flex-basis: 100%; }
+/* the rag tree and the winds */
+.hook b.fading { font-weight: normal; font-style: italic; }
+.card.wind .was { font-family: var(--f-hand); font-size: 1.1rem; font-style: italic; margin: 6px 0 10px; }
+/* the Dinnseanchas */
+.lorelist li.lore { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.lorelist li.lore p { margin: 0; }
+.lorelist li.lore.dim b { color: var(--soft); font-style: italic; font-weight: normal; }
+.lorelist li.lore.dim span { color: var(--soft); }
+.lorelist li { list-style: none; }
+.lorelist:not(.days) > li:not(.lore) { padding: 6px 0; }
+.lorelist.days li { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: 4px 14px; padding: 6px 0; border-bottom: 1px dashed var(--rule); }
+.lorelist.days li span { color: var(--soft); }
+@media (max-width: 480px) { .lorelist.days li { grid-template-columns: 1fr; } }

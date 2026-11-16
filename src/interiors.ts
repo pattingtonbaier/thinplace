@@ -175,7 +175,16 @@ export type Market = {
   belt: string; wares: number; wants: { name: string; frac: number }[]; ins: number; outs: number; tokens: string[];
   bike: number; bikeRecent: boolean; car: number; carRecent: boolean; mood: "quiet" | "market" | "fair"; fair: Fair | null; dow: number; day: number;
 };
-type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall; market?: Market };
+export type Well = {
+  phase: number; // the moon's age through its month, 0 new, 0.5 full
+  rags: { age: number; worded: boolean }[]; // age as a fraction of a moon; gone at 1
+  step: number; quartz: number; // the rounds: stations walked this round, and rounds finished
+  shawl: number | null; // therapy: days since, while it lingers
+  herbs: number[]; weed: number[]; // still-room bundles and seaweed fronds, as ages from 0 fresh to 1 gone
+  steam: boolean; trout: boolean; imbolc: boolean;
+};
+type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall; market?: Market; well?: Well };
+const NO_WELL: Well = { phase: 0.3, rags: [], step: 0, quartz: 0, shawl: null, herbs: [], weed: [], steam: false, trout: false, imbolc: false };
 const NO_MARKET: Market = { belt: "", wares: 0, wants: [], ins: 0, outs: 0, tokens: [], bike: 0, bikeRecent: false, car: 0, carRecent: false, mood: "quiet", fair: null, dow: 2, day: 6 };
 // The old fair days that open the square, whatever day of the week they fall on.
 const FAIRS: Fair[] = [
@@ -1323,6 +1332,158 @@ function marketFront() {
 }
 const marketBand = (i: number): [number, number, number, number] => [[10, 194], [194, 340], [470, 646], [648, 752], [752, 895]].map(([a, b2]) => [a, MS.gy - 210, b2, MS.gy + 24] as [number, number, number, number])[i];
 
+
+// ---------- the Healing Well: a spring in a green hollow, under the real moon ----------
+// Everything else in the Hollow keeps a record. Here most things fade: rags on the thorn, herbs drying in the still-room,
+// fronds on the seaweed line, the shawl left on the far stone. Only the quartz pebbles from finished rounds stay.
+const HW = { w: 880, h: 640 };
+const WELL_SPOTS: Spot[] = [
+  { room: "the Moon Garden", at: [0, 0], hot: [0, 0], name: "the Moon Garden" },
+  { room: "the Two Stones", at: [0, 0], hot: [0, 0], name: "the Two Stones" },
+  { room: "the Still-room", at: [0, 0], hot: [0, 0], name: "the Still-room" },
+  { room: "the Seaweed Baths", at: [0, 0], hot: [0, 0], name: "the Seaweed Baths" },
+];
+const wl = () => extra.well ?? NO_WELL;
+const ROUND = { cx: 452, cy: 446, rx: 236, ry: 74 };
+const roundAt = (k: number): Pt => { const a = Math.PI / 2 + (k * 2 * Math.PI) / 7; return [ROUND.cx + Math.cos(a) * ROUND.rx, ROUND.cy + Math.sin(a) * ROUND.ry]; };
+// the moon, lit by phase: 0 new, 0.5 full
+function moonDisc(x: number, y: number, r: number, ph: number, lit: string, dark: string) {
+  ell(x, y, r, r, dark, 0);
+  const k = Math.cos(ph * 2 * Math.PI), waxing = ph < 0.5;
+  c.beginPath(); c.ellipse(x, y, r, r, 0, waxing ? -Math.PI / 2 : Math.PI / 2, waxing ? Math.PI / 2 : Math.PI * 1.5); c.closePath(); c.fillStyle = lit; c.fill();
+  c.beginPath(); c.ellipse(x, y, Math.max(0.01, Math.abs(k) * r), r, 0, 0, Math.PI * 2); c.fillStyle = k < 0 ? lit : dark; c.fill();
+  c.beginPath(); c.ellipse(x, y, r, r, 0, 0, Math.PI * 2); c.lineWidth = 1.2; c.strokeStyle = "#3a3733"; c.stroke();
+}
+const isFull = (ph: number) => Math.abs(ph - 0.5) < 0.05, isDark = (ph: number) => ph < 0.035 || ph > 0.965;
+function wellStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, W = wl(), ph = W.phase, full = isFull(ph), dark = isDark(ph);
+  const sky = c.createLinearGradient(0, 0, 0, 340);
+  sky.addColorStop(0, dark ? "#4a4850" : "#615e68"); sky.addColorStop(1, dark ? "#8d8a8c" : full ? "#c3c2c4" : "#aba8a6");
+  c.fillStyle = sky; c.fillRect(0, 0, HW.w, 340);
+  for (let k = 0; k < 70; k++) { const y = h2(k, 6) * 260; c.globalAlpha = 0.9 - y / 300; ell(h2(k, 5) * HW.w, y, 1.1, 1.1, "#f4f2ed"); } c.globalAlpha = 1;
+  if (full) { c.globalAlpha = 0.25; ell(730, 92, 70, 70, "#f4f2ed"); c.globalAlpha = 1; }
+  if (!dark) moonDisc(730, 92, 28, ph, "#f4f2ed", "#6f6c72"); else { c.beginPath(); c.ellipse(730, 92, 28, 28, 0, 0, Math.PI * 2); c.lineWidth = 1; c.strokeStyle = "#8d8a8c"; c.stroke(); }
+  // the far hills and their trees
+  poly([[0, 300], [120, 270], [260, 292], [420, 262], [600, 288], [760, 258], [880, 280], [880, 360], [0, 360]], "#7c7d76", 2);
+  for (let k = 0; k < 22; k++) { const x = h2(k, 41) * 880, y = 290 + h2(k, 42) * 26; ell(x, y - 12, 12 + h2(k, 43) * 8, 14, "#62635d", 1.2); line([[x, y], [x, y + 6]], 2); }
+  // the hollow
+  poly([[0, 330], [200, 352], [450, 366], [700, 350], [880, 324], [880, HW.h], [0, HW.h]], full ? "#c4c6b9" : "#b4b6a6", 2.4);
+  for (let k = 0; k < 170; k++) { const x = h2(k, 3) * 880, y = 352 + h2(k, 4) * 280; c.strokeStyle = "#868a78"; c.lineWidth = 1; c.beginPath(); c.moveTo(x - 3, y); c.lineTo(x - 1, y - 5); c.lineTo(x + 1, y); c.lineTo(x + 3, y - 6); c.stroke(); }
+  // the stream out of the pool and away down the hollow
+  poly([[414, 420], [440, 424], [412, 470], [340, 540], [276, 640], [228, 640], [298, 540], [380, 466]], full ? "#c9ccd0" : "#7d8086", 1.6);
+  for (let k = 0; k < 7; k++) { const y = 450 + k * 26, x = 404 - (y - 430) * 0.82; line([[x - 6, y], [x + 4, y - 2]], 0.8, "#e3e4e6"); }
+  // the rounds: seven stations walked sunwise round the well
+  for (let k = 0; k < 7; k++) { const [x, y] = roundAt(k); ell(x, y, 18, 7, "#9d9a94", 1.8); ell(x - 3, y - 2, 6, 2, "#bdb9b2"); }
+  if (!open("the Seaweed Baths")) chalkAt(130, 350);
+  if (!open("the Still-room")) chalkAt(760, 350);
+  if (!open("the Two Stones")) chalkAt(745, 500);
+  if (!open("the Moon Garden")) chalkAt(560, 470);
+}
+// the rag tree's branch-ends, where rags get tied
+const RAG_AT: Pt[] = [[-40, -96], [26, -104], [56, -120], [-62, -110], [14, -136], [-30, -128], [-6, -60], [-22, -78], [40, -112], [-50, -103], [8, -82], [20, -120], [-34, -112], [46, -116], [-14, -70], [0, -96]];
+function wellThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], W = wl(), ph = W.phase, full = isFull(ph), dark = isDark(ph);
+  // the rag tree, and the rags on it fading over a moon
+  out.push({ depth: 0.5, draw: () => {
+    const x = 132, y = 566; hawthorn(x, y, extra.season, t);
+    W.rags.slice(-RAG_AT.length).forEach((r, k) => {
+      const [dx, dy] = RAG_AT[k], sw = Math.sin(t * 1.3 + k * 1.7) * 3, len = r.worded ? 22 : 16, a = 1 - r.age * 0.85;
+      c.globalAlpha = a; poly([[x + dx - 2, y + dy], [x + dx + 3, y + dy], [x + dx + 4 + sw, y + dy + len], [x + dx - 1 + sw, y + dy + len - 2]], r.age < 0.5 ? "#f1ece2" : "#d7d2c8", 0.9);
+      if (r.worded) for (let q = 0; q < 3; q++) line([[x + dx + sw * (q / 4), y + dy + 5 + q * 5], [x + dx + 2 + sw * (q / 4), y + dy + 5 + q * 5]], 0.7, "#3a3733");
+      c.globalAlpha = 1;
+    });
+  } });
+  // the well-house over the spring, its pool, the quartz from finished rounds, and the trout
+  out.push({ depth: 1, draw: () => {
+    const x0 = 382, x1 = 502, base = 404, mid = 442;
+    const hood: Pt[] = [[x0, base], [x0 + 4, base - 50], [x0 + 22, base - 84], [mid, base - 96], [x1 - 22, base - 84], [x1 - 4, base - 50], [x1, base]];
+    poly(hood, "#a9a59d", 2.4);
+    clipTo(hood, () => { for (let r = 0; r < 9; r++) { const y = base - 6 - r * 11; for (let x = x0 - 10 + (r % 2) * 9; x < x1 + 10; x += 18) { c.beginPath(); c.ellipse(x, y, 8, 4.4, 0, 0, Math.PI * 2); c.lineWidth = 0.9; c.strokeStyle = "#5f5b55"; c.stroke(); } } });
+    poly(hood, null, 2.4);
+    c.beginPath(); c.moveTo(mid - 22, base); c.lineTo(mid - 22, base - 38); c.arc(mid, base - 38, 22, Math.PI, 0); c.lineTo(mid + 22, base); c.closePath(); c.fillStyle = "#3a3733"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    // a niche above the door: a candle burns there at the dark of the moon
+    poly(rect2(mid - 6, base - 78, mid + 6, base - 64), "#3a3733", 1.2);
+    if (dark || W.imbolc) { poly(rect2(mid - 2, base - 72, mid + 2, base - 65), "#ece8e0", 0.6); flameAt(c, mid, base - 73, 0.2, t); }
+    // the pool, holding the moon
+    const py = base + 14; ell(mid, py, 78, 16, "#8d8a84", 2);
+    ell(mid, py + 1, 70, 12, full ? "#c9ccd0" : "#4c4d52", 1.2);
+    for (let k = 0; k < 3; k++) { const yy = py - 6 + k * 5, wob = Math.sin(t * 1.2 + k) * 6; line([[mid - 40 + wob, yy], [mid - 10 + wob, yy]], 0.8, full ? "#fbfaf6" : "#8d8f95"); }
+    if (!dark) { c.save(); c.beginPath(); c.ellipse(mid, py + 1, 70, 12, 0, 0, Math.PI * 2); c.clip(); c.translate(mid + 34 + Math.sin(t * 0.8) * 1.5, py + 2); c.scale(1, 0.42); moonDisc(0, 0, 9, ph, "#f4f2ed", "#4c4d52"); c.restore(); }
+    // white quartz from each finished round, laid along the lip
+    for (let k = 0; k < Math.min(24, W.quartz); k++) { const a = Math.PI * (0.08 + (k / 24) * 0.84); ell(mid + Math.cos(a) * 80, py + Math.sin(a) * 17, 3.4, 2.4, "#fbfaf6", 0.9); }
+    // the trout: it rises only now and then
+    if (W.trout) { const cyc = (t % 7) / 7; if (cyc < 0.3) { const u = cyc / 0.3, fx = mid - 30 + u * 40, fy = py - Math.sin(u * Math.PI) * 26; c.save(); c.translate(fx, fy); c.rotate(-Math.cos(u * Math.PI) * 0.8); poly([[-9, 0], [-3, -4], [6, -3], [9, 0], [6, 3], [-3, 4]], "#c9ccd0", 1.1); poly([[-9, 0], [-14, -4], [-14, 4]], "#c9ccd0", 1); ell(5, -1, 0.9, 0.9, "#1e1c1a"); c.restore(); }
+      const rp = ((t % 7) / 7 - 0.3) / 0.7; if (rp > 0 && rp < 1) { c.globalAlpha = 1 - rp; c.beginPath(); c.ellipse(mid + 10, py, 6 + rp * 30, 2 + rp * 6, 0, 0, Math.PI * 2); c.lineWidth = 1; c.strokeStyle = "#f4f2ed"; c.stroke(); c.globalAlpha = 1; } }
+    // Imbolc: the well dressed for Brigid
+    if (W.imbolc) {
+      for (const bx of [x0 + 20, x1 - 20]) { const by = base - 48; line([[bx - 9, by], [bx + 9, by]], 2.6, "#c9b48c"); line([[bx, by - 9], [bx, by + 9]], 2.6, "#c9b48c"); poly(rect2(bx - 3, by - 3, bx + 3, by + 3), "#a8977a", 1); }
+      for (let k = 0; k < 24; k++) { const fx = x0 - 4 + h2(k, 51) * (x1 - x0 + 8), fy = base - 2 + h2(k, 52) * 4; line([[fx, fy], [fx, fy - 6]], 0.9, "#5f6b55"); ell(fx, fy - 7, 2.2, 2.2, k % 3 ? "#fbfaf6" : "#e8c76a", 0.5); }
+      for (let k = 0; k < 2; k++) { const cx2 = k ? x1 + 16 : x0 - 16; poly(rect2(cx2 - 3, base - 18, cx2 + 3, base), "#ece8e0", 1); flameAt(c, cx2, base - 19, 0.24, t + k); }
+    }
+  } });
+  // the rounds: a pebble on each station walked this round, and a glow on the next
+  if (open("the Moon Garden")) out.push({ depth: 0.2, draw: () => {
+    for (let k = 0; k < 7; k++) { const [x, y] = roundAt(k); if (k < W.step) ell(x + 4, y - 5, 3.4, 2.4, "#fbfaf6", 0.9); else if (k === W.step) { c.globalAlpha = 0.3 + 0.2 * Math.sin(t * 1.5); ell(x, y, 24, 10, "#f4f2ed"); c.globalAlpha = 1; } }
+  } });
+  // the Two Stones: a seat for you and one for whoever listens; a shawl lingers on the far one a while after
+  if (open("the Two Stones")) out.push({ depth: 1, draw: () => {
+    // two low boulders, worn flat on top by sitting, turned a little toward each other
+    const boulder = (cx: number, y: number, flip: number) => {
+      c.beginPath(); c.moveTo(cx - 36, y); c.quadraticCurveTo(cx - 40, y - 26, cx - 22 * flip, y - 32); c.lineTo(cx + 18 * flip, y - 34); c.quadraticCurveTo(cx + 40, y - 30, cx + 36, y); c.closePath();
+      c.fillStyle = "#9d9a94"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+      line([[cx - 18, y - 30], [cx + 14, y - 31]], 1, "#d7d3cc");
+      for (let k = 0; k < 6; k++) ell(cx - 26 + h2(k, cx) * 50, y - 6 - h2(k, cx + 1) * 16, 3, 2, "#7c8070");
+    };
+    const y = 520; boulder(712, y, 1); boulder(822, y + 6, -1);
+    if (W.shawl !== null) { c.globalAlpha = Math.max(0.2, 1 - W.shawl / 14); poly([[800, y - 22], [846, y - 24], [850, y - 4], [838, y + 4], [806, y - 2]], "#a8977a", 1.4); for (let k = 0; k < 6; k++) line([[810 + k * 6, y], [810 + k * 6, y + 7]], 0.8, "#6f6252"); c.globalAlpha = 1; }
+  } });
+  // the Still-room: a thatched lean-to, herbs from each appointment hung under the eaves to dry
+  if (open("the Still-room")) out.push({ depth: 0.3, draw: () => {
+    const x0 = 692, x1 = 830, base = 370;
+    poly(rect2(x0, base - 62, x1, base), "#d7d1c4", 2); for (let k = 0; k < 5; k++) line([[x0, base - 14 - k * 11], [x1, base - 14 - k * 11]], 0.6, "#a8a39b");
+    poly(rect2(x0 + 18, base - 42, x0 + 40, base), "#6f6252", 1.6); poly(rect2(x1 - 44, base - 46, x1 - 22, base - 26), "#4c4d52", 1.4);
+    const roof: Pt[] = [[x0 - 16, base - 58], [x0 + 6, base - 100], [x1 - 6, base - 100], [x1 + 16, base - 58]];
+    poly(roof, "#8d887f", 2.2); clipTo(roof, () => { for (let yy = base - 100; yy < base - 56; yy += 6) for (let xx = x0 - 14 + ((yy / 6) % 2) * 5; xx < x1 + 16; xx += 10) line([[xx, yy], [xx + 2, yy + 7]], 0.8, "#5f5b55"); });
+    poly(roof, null, 2.2);
+    W.herbs.slice(-8).forEach((age, k) => {
+      const hx = x0 - 6 + k * 21, hy = base - 58, fresh = Math.max(0, 1 - age);
+      line([[hx, hy], [hx, hy + 6]], 0.8);
+      const col = fresh > 0.66 ? "#6f7a5a" : fresh > 0.33 ? "#9a9c80" : "#cfc8b4";
+      for (let q = -2; q <= 2; q++) poly([[hx, hy + 6], [hx + q * 2.4 - 1.4, hy + 18 + Math.abs(q) * -1], [hx + q * 2.4 + 1.4, hy + 18 + Math.abs(q) * -1]], col, 0.7);
+      line([[hx - 3, hy + 8], [hx + 3, hy + 8]], 1.2, "#6f6252");
+    });
+  } });
+  // the Seaweed Baths: a stone bath-house with a copper tub, and a line of wrack drying in the wind
+  if (open("the Seaweed Baths")) out.push({ depth: 0.3, draw: () => {
+    const x0 = 58, x1 = 192, base = 362;
+    coursed(rect2(x0, base - 66, x1, base), x0, x1, base - 66, base, "#a9a59d");
+    poly([[x0 - 10, base - 64], [(x0 + x1) / 2, base - 104], [x1 + 10, base - 64]], "#6f6b65", 2.2);
+    for (let k = 1; k < 6; k++) { const u = k / 6; line([[x0 - 10 + u * ((x0 + x1) / 2 - x0 + 10), base - 64 - u * 40], [x1 + 10 - u * (x1 + 10 - (x0 + x1) / 2), base - 64 - u * 40]], 0.7, "#4c4945"); }
+    poly(rect2(x0 + 30, base - 48, x0 + 96, base), "#3a3733", 1.8);
+    c.beginPath(); c.ellipse(x0 + 63, base - 14, 26, 7, 0, 0, Math.PI * 2); c.fillStyle = "#b07a4e"; c.fill(); c.lineWidth = 1.6; c.strokeStyle = INK; c.stroke();
+    c.beginPath(); c.ellipse(x0 + 63, base - 15, 20, 4, 0, 0, Math.PI * 2); c.fillStyle = "#5e5a45"; c.fill();
+    if (W.steam) for (let k = 0; k < 4; k++) { const p2 = (t * 0.15 + k / 4) % 1; c.globalAlpha = (1 - p2) * 0.6; ell(x0 + 54 + k * 6 + Math.sin(p2 * 6 + k) * 8, base - 22 - p2 * 80, 7 + p2 * 10, 4 + p2 * 5, "#ece8e0"); c.globalAlpha = 1; }
+    // the wrack line, from the gable to a post
+    const lx0 = x1 + 2, ly0 = base - 56, lx1 = 268, ly1 = base - 50; line([[lx1, base + 4], [lx1, ly1 - 4]], 2.4, "#6f6252"); c.beginPath(); c.moveTo(lx0, ly0); c.quadraticCurveTo((lx0 + lx1) / 2, ly0 + 10, lx1, ly1); c.lineWidth = 0.9; c.strokeStyle = INK; c.stroke();
+    W.weed.slice(-6).forEach((age, k) => {
+      const u = (k + 0.7) / 6.5, fx = lx0 + u * (lx1 - lx0), fy = ly0 + u * (ly1 - ly0) + Math.sin(u * Math.PI) * 8, sw = Math.sin(t + k) * 2;
+      const col = age < 0.33 ? "#4f5040" : age < 0.66 ? "#7a7660" : "#b9b39c";
+      c.lineWidth = 3.4; c.strokeStyle = col; c.lineCap = "round"; c.beginPath(); c.moveTo(fx, fy); c.quadraticCurveTo(fx + 4 + sw, fy + 12, fx + sw, fy + 26); c.stroke();
+      c.lineWidth = 2.4; c.beginPath(); c.moveTo(fx + 2, fy); c.quadraticCurveTo(fx - 4 + sw, fy + 10, fx - 2 + sw, fy + 20); c.stroke();
+    });
+  } });
+  return out;
+}
+function wellFront() {
+  const W = wl(), ph = W.phase;
+  if (isFull(ph)) { c.globalAlpha = 0.07; c.fillStyle = "#eef2f6"; c.fillRect(0, 0, HW.w, HW.h); c.globalAlpha = 1; }
+  const names = ["The dark of the moon. A candle burns at the well.", "A new moon, thin as a paring.", "The moon is waxing.", "A half moon, filling.", "The moon is nearly full.", "The moon is full. The water has gone to silver.", "The moon is just past full.", "The moon is waning.", "A half moon, emptying.", "An old moon, thin before dawn."];
+  const k = isDark(ph) ? 0 : isFull(ph) ? 5 : ph < 0.12 ? 1 : ph < 0.22 ? 2 : ph < 0.3 ? 3 : ph < 0.45 ? 4 : ph < 0.62 ? 6 : ph < 0.72 ? 7 : ph < 0.82 ? 8 : 9;
+  const words = W.imbolc ? "Imbolc. The well is dressed for Brigid." : names[k];
+  c.font = `italic 14px 'IM Fell English', Georgia, serif`; c.fillStyle = "#2a2724"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText(words, HW.w / 2, HW.h - 14);
+}
+const inR = (x: number, y: number, r: number[]) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -1368,6 +1529,12 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     hit: (x, y) => [0, 1, 2, 3, 4].find((i) => { const [a, b, c2, d] = marketBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
     stand: (i) => [[184, MS.gy + 8, 0.6], [344, MS.gy + 8, 0.6], [470, MS.gy + 8, 0.6], [664, MS.gy + 8, 0.6], [758, MS.gy + 8, 0.6]][i] as [number, number, number],
     labelAt: (i) => [[100, MS.gy + 48], [262, MS.gy + 76], [556, MS.gy + 48], [700, MS.gy + 76], [810, MS.gy + 48]][i] as Pt,
+  },
+  "healing-well": {
+    spots: WELL_SPOTS, still: wellStill, things: wellThings, front: wellFront, size: [HW.w, HW.h],
+    hit: (x, y) => inR(x, y, [30, 250, 280, 368]) ? 3 : inR(x, y, [660, 250, 880, 380]) ? 2 : inR(x, y, [600, 430, 880, 600]) ? 1 : inR(x, y, [40, 300, 640, 640]) ? 0 : -1,
+    stand: (i) => [[540, 474, 0.6], [768, 530, 0.6], [664, 384, 0.55], [226, 372, 0.55]][i] as [number, number, number],
+    labelAt: (i) => [[580, 572], [768, 574], [762, 248], [125, 240]][i] as Pt,
   },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],

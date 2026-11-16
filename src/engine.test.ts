@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { awardFor, dayKey, derive, emptySave, levelFromXP, merge, searchActions, startEmbers, type Log, type Save } from "./engine";
+import { awardFor, dayKey, derive, emptySave, fadeRags, windDue, windReturns, levelFromXP, merge, searchActions, startEmbers, type Log, type Save } from "./engine";
 
 const T0 = new Date(2026, 10, 2, 12).getTime(); // 2 Nov 2026, noon local
 const H = 3600_000;
@@ -179,4 +179,18 @@ test("the waiting hook: bringing a want home after a moon adds Resolve; buying a
   expect(waited.xp).toBe(14);
   expect(waited.byEmber.R).toBe(10);
   expect(awardFor({ id: "c", ts: 0, action: "let-go", how: "gave" }, 0).xp).toBeGreaterThan(plain.xp * 3);
+});
+
+test("rags fade after a moon into winds, which come back on a turning day and a year on", () => {
+  const s = emptySave(); const tied = new Date(2026, 6, 9).getTime();
+  s.rags = [{ id: "r1", tied, words: "stretched thin" }];
+  expect(fadeRags(s, tied + 10 * 864e5)).toBe(false);
+  expect(fadeRags(s, tied + 29 * 864e5)).toBe(true);
+  expect(s.rags).toEqual([]); expect(s.winds?.[0].words).toBe("stretched thin");
+  const w = s.winds![0], r = windReturns(w);
+  expect(new Date(r[0].ts).getMonth()).toBe(9); // Samhain, the first turning day a season on
+  expect(new Date(r[1].ts).getFullYear()).toBe(2027);
+  expect(windDue(w, new Date(2026, 9, 31, 12).getTime())?.name).toBe("Samhain");
+  w.answers = [{ due: r[0].ts, at: 0, now: "steadier" }];
+  expect(windDue(w, new Date(2026, 10, 15).getTime())).toBe(null);
 });

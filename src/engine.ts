@@ -91,6 +91,8 @@ export interface Save {
   familiars?: Familiar[];
   relics?: RelicChoice[];
   wants?: Want[]; // the waiting hook in the Peddler's Market
+  rags?: Rag[]; // words tied to the rag tree at the Healing Well; they fade after a moon
+  winds?: Wind[]; // the words, once faded, carried on the wind until they come back
 
 }
 
@@ -99,6 +101,39 @@ export interface TierUp { ember: Ember; tier: number; ts: number; logId: string 
 
 export interface Notebook { n: number; started: number; finished?: number }
 export interface Gleaning { id: string; moon: string; written: number; lines: string[] }
+// The rag tree: words tied to the thorn by the Healing Well. After a moon the rag fades and its words go on the wind.
+// A wind comes back on the first turning day at least a season later, and again a year after it was tied:
+// where you were (the words), where you are, where you're going.
+export interface Rag { id: string; tied: number; words: string }
+export interface WindAnswer { due: number; at: number; now?: string; going?: string }
+export interface Wind { id: string; tied: number; words: string; answers?: WindAnswer[] }
+export const RAG_DAYS = 28;
+// The eight turning days of the year, as month and day.
+export const TURNING_DAYS: { name: string; m: number; d: number }[] = [
+  { name: "Imbolc", m: 1, d: 1 }, { name: "the spring equinox", m: 2, d: 20 }, { name: "Bealtaine", m: 4, d: 1 }, { name: "Midsummer", m: 5, d: 21 },
+  { name: "Lughnasadh", m: 7, d: 1 }, { name: "the autumn equinox", m: 8, d: 22 }, { name: "Samhain", m: 9, d: 31 }, { name: "Midwinter", m: 11, d: 21 },
+];
+export function nextTurning(after: number): { ts: number; name: string } {
+  const y = new Date(after).getFullYear();
+  for (const yy of [y, y + 1]) for (const t of TURNING_DAYS) { const ts = new Date(yy, t.m, t.d).getTime(); if (ts >= after) return { ts, name: t.name }; }
+  return { ts: after, name: "" };
+}
+// When a wind comes back: once on a turning day at least a season (91 days) after the words were tied, and on their anniversary.
+export function windReturns(w: Wind): { ts: number; name: string }[] {
+  const first = nextTurning(w.tied + 91 * 864e5), yr = new Date(w.tied); yr.setFullYear(yr.getFullYear() + 1); yr.setHours(0, 0, 0, 0);
+  return [first, { ts: yr.getTime(), name: "a year to the day" }].sort((a, b) => a.ts - b.ts);
+}
+export function windDue(w: Wind, now: number): { ts: number; name: string } | null {
+  return windReturns(w).find((r) => r.ts <= now && !(w.answers ?? []).some((a) => a.due === r.ts)) ?? null;
+}
+// Rags older than a moon let their words go to the wind. Returns true if anything faded.
+export function fadeRags(s: Save, now: number): boolean {
+  const old = (s.rags ?? []).filter((r) => now - r.tied >= RAG_DAYS * 864e5);
+  if (!old.length) return false;
+  s.winds = [...(s.winds ?? []), ...old.filter((r) => !(s.winds ?? []).some((w) => w.id === r.id)).map((r) => ({ id: r.id, tied: r.tied, words: r.words }))];
+  s.rags = (s.rags ?? []).filter((r) => !old.includes(r));
+  return true;
+}
 export interface Want { id: string; name: string; hung: number; done?: number; outcome?: "brought" | "let-go" }
 export const WAIT_DAYS = 28; // a moon on the hook
 export const WAIT_BONUS = 10; // Resolve, for waiting
@@ -396,6 +431,11 @@ export function merge(a: Save, b: Save): Save {
   const wants = new Map<string, Want>();
   for (const w of [...(a.wants ?? []), ...(b.wants ?? [])]) { const p = wants.get(w.id); if (!p || (w.done ?? 0) > (p.done ?? 0)) wants.set(w.id, w); }
   if (wants.size) out.wants = [...wants.values()].sort((x, y) => x.hung - y.hung);
+  const winds = new Map<string, Wind>();
+  for (const w of [...(a.winds ?? []), ...(b.winds ?? [])]) { const p = winds.get(w.id); const ans = [...(p?.answers ?? []), ...(w.answers ?? [])].filter((x, i, arr) => arr.findIndex((y) => y.due === x.due) === i); winds.set(w.id, { ...(p ?? w), answers: ans.length ? ans : undefined }); }
+  if (winds.size) out.winds = [...winds.values()].sort((x, y) => x.tied - y.tied);
+  const rags = new Map<string, Rag>(); for (const r of [...(a.rags ?? []), ...(b.rags ?? [])]) if (!winds.has(r.id)) rags.set(r.id, r);
+  if (rags.size) out.rags = [...rags.values()].sort((x, y) => x.tied - y.tied);
   const rel = new Map<string, RelicChoice>();
   for (const r of [...(a.relics ?? []), ...(b.relics ?? [])]) { const k = r.ember + r.tier, p = rel.get(k); if (!p || (r.swapped ?? r.chosen) > (p.swapped ?? p.chosen)) rel.set(k, r); }
   if (rel.size) out.relics = [...rel.values()];
