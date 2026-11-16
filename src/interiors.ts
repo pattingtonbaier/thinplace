@@ -1072,6 +1072,7 @@ const feastBand = (i: number): [number, number, number, number] => {
 
 
 // ---------- the Market Square: an aonach round a market cross. It opens on your market day and on the old fair days. ----------
+// The fair glove at its heart goes up its pole when the market opens.
 // It rewards keeping, mending and letting go: the belt on the loom, the waiting hook, the scale, the wheel, the cart in its house.
 const MS = { w: 900, h: 660, gy: 470 };
 const MARKET_SPOTS: Spot[] = [
@@ -1123,6 +1124,17 @@ function marketStill(rooms: Rooms) {
   if (!open("the Wheelwright")) chalkAt(700, gy - 12);
   if (!open("the Carriage House")) chalkAt(820, gy - 12);
   void M;
+}
+// a great glove, leather and stitched: the old sign that a fair or market is open
+function fairGlove(x: number, b: number, s2: number, up: boolean) {
+  const sx = (v: number) => x + v * s2, sy = (v: number) => b - v * s2;
+  poly([[sx(-12), sy(0)], [sx(12), sy(0)], [sx(14), sy(16)], [sx(-14), sy(16)]], "#a8977a", 1.6);
+  for (let k = -10; k <= 10; k += 5) line([[sx(k), sy(2)], [sx(k), sy(14)]], 0.7, "#6f6252");
+  poly([[sx(-14), sy(16)], [sx(14), sy(16)], [sx(15), sy(38)], [sx(-15), sy(38)]], "#c9b48c", 1.8);
+  for (const [fx, h] of [[-11, 22], [-4, 27], [3, 25], [10, 19]] as Pt[]) poly([[sx(fx - 3.4), sy(37)], [sx(fx + 3.4), sy(37)], [sx(fx + 3), sy(37 + h)], [sx(fx), sy(39 + h)], [sx(fx - 3), sy(37 + h)]], "#c9b48c", 1.5);
+  poly([[sx(14), sy(24)], [sx(24), sy(36)], [sx(26), sy(44)], [sx(20), sy(44)], [sx(13), sy(34)]], "#c9b48c", 1.5);
+  line([[sx(-8), sy(24)], [sx(6), sy(30)]], 0.8, "#8d7a62"); ell(sx(0), sy(26), 3 * s2, 3 * s2, null, 0.8);
+  if (up) { c.globalAlpha = 0.18; ell(x, b - 40 * s2, 40 * s2, 40 * s2, "#f3d9a8"); c.globalAlpha = 1; }
 }
 function wareAt(k: number, x: number, b: number) {
   const kind = k % 6;
@@ -1195,14 +1207,19 @@ function marketThings(rooms: Rooms, t: number): { depth: number; draw: () => voi
     wheel(262, gy - 26, 26, 10, 10, 2.6);
     if (!M.wares && !M.wants.length) quietText("hang a want on the hook", 262, gy - 160, 11);
   } });
-  // the market cross, with the cat on the steps on a quiet day
+  // the fair glove: hoisted up its pole when the market is open and under the fair's peace, lowered on quiet days, garlanded for a fair
   out.push({ depth: 0, draw: () => {
-    const x = 410;
+    const x = 410, top = gy - 214;
     for (let k = 0; k < 3; k++) poly(rect2(x - 34 + k * 9, gy - 8 - k * 8, x + 34 - k * 9, gy - k * 8), "#bdb8b0", 1.8);
-    poly(rect2(x - 6, gy - 150, x + 6, gy - 24), "#c9c4bb", 2);
-    ell(x, gy - 166, 18, 18, null, 3.4); poly([[x - 8, gy - 190], [x + 8, gy - 190], [x + 6, gy - 142], [x - 6, gy - 142]], "#c9c4bb", 2); poly([[x - 26, gy - 172], [x + 26, gy - 172], [x + 26, gy - 160], [x - 26, gy - 160]], "#c9c4bb", 2);
-    ell(x, gy - 166, 4, 4, null, 1.2);
-    if (!busy) { const cx = x + 18, cy = gy - 24; ell(cx, cy - 6, 9, 6, "#3a3733"); ell(cx + 7, cy - 13, 5, 4.6, "#3a3733"); poly([[cx + 4, cy - 16], [cx + 5, cy - 21], [cx + 7, cy - 16]], "#3a3733", 0); poly([[cx + 8, cy - 16], [cx + 10, cy - 21], [cx + 11, cy - 15]], "#3a3733", 0); c.lineWidth = 2; c.strokeStyle = "#3a3733"; c.beginPath(); c.moveTo(cx - 8, cy - 4); c.quadraticCurveTo(cx - 18, cy + 4, cx - 12, cy + 8); c.stroke();
+    poly(rect2(x - 5, top, x + 5, gy - 24), "#8d7a62", 2); for (let y = top + 14; y < gy - 30; y += 22) line([[x - 5, y], [x + 5, y + 3]], 0.7, "#6f6252");
+    ell(x, top - 4, 7, 5, "#6f6252", 1.6);
+    line([[x + 7, top + 2], [x + 7, gy - 34]], 0.9, "#5f5b55"); poly(rect2(x + 4, gy - 46, x + 12, gy - 42), "#6f6252", 1);
+    const gyl = busy ? top + 58 + Math.sin(t * 0.9) * 1.2 : gy - 25;
+    if (fid) { for (let k = 0; k < 9; k++) { const y = top + 30 + k * 18; line([[x - 6, y], [x + 6, y + 9]], 3, k % 2 ? "#f4f2ed" : "#c9b48c"); }
+      c.beginPath(); c.ellipse(x, top + 22, 20, 5, 0, 0, Math.PI * 2); c.lineWidth = 5; c.strokeStyle = "#8d887f"; c.stroke(); for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; ell(x + Math.cos(a) * 20, top + 22 + Math.sin(a) * 5, 2.4, 2.4, "#fbfaf6", 0.6); }
+      for (let k = 0; k < 4; k++) { const sw = Math.sin(t * 1.3 + k) * 4; line([[x - 12 + k * 8, top + 26], [x - 14 + k * 8 + sw, top + 70]], 1.6, k % 2 ? "#f4f2ed" : "#c9b48c"); } }
+    fairGlove(x, gyl, busy ? 1 : 0.8, busy);
+    if (!busy) { const cx = x - 34, cy = gy - 16; ell(cx, cy - 6, 9, 6, "#3a3733"); ell(cx + 7, cy - 13, 5, 4.6, "#3a3733"); poly([[cx + 4, cy - 16], [cx + 5, cy - 21], [cx + 7, cy - 16]], "#3a3733", 0); poly([[cx + 8, cy - 16], [cx + 10, cy - 21], [cx + 11, cy - 15]], "#3a3733", 0); c.lineWidth = 2; c.strokeStyle = "#3a3733"; c.beginPath(); c.moveTo(cx - 8, cy - 4); c.quadraticCurveTo(cx - 18, cy + 4, cx - 12, cy + 8); c.stroke();
       for (let k = 0; k < 3; k++) { const px = 350 + k * 70 + Math.sin(t * 0.7 + k) * 4, py = gy + 20 + k * 6, peck = Math.sin(t * 3 + k * 2) > 0.6 ? 3 : 0; ell(px, py - 5, 6, 4, "#8d887f", 0.8); ell(px + 6, py - 9 + peck, 3, 3, "#6f6b65", 0.8); line([[px - 1, py - 1], [px - 1, py + 2]], 0.8); line([[px + 2, py - 1], [px + 2, py + 2]], 0.8); } }
     if (fid === "lughnasadh") for (const sx of [x - 52, x + 52]) { for (let k = -3; k <= 3; k++) line([[sx, gy], [sx + k * 4, gy - 40]], 1.4, "#a8977a"); line([[sx - 8, gy - 22], [sx + 8, gy - 22]], 2, "#6f6252"); }
   } });
