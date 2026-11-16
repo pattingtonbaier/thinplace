@@ -2,7 +2,7 @@ import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
 import { attachBothy, placeAt, STATIONS } from "./bothy";
 import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table";
-import { attachInterior, hasScene, sceneRooms } from "./interiors";
+import { attachInterior, hasScene, sceneRooms, seasonOf, type Season } from "./interiors";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
   type Need, ACTIONS, ACTION_BY_ID, BLOCKERS, BUILDINGS, CALLINGS, CALLING_BY_ID, EMBERS, FEELINGS, GLOWS, HOODS, SATCHELS, STAVES,
@@ -19,7 +19,7 @@ import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForD
 type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
-  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar"
+  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind"
   | { found: BuildingId } | { level: number } | { relic: { ember: Ember; tier: number; swap?: boolean } };
 
 const st = {
@@ -45,6 +45,7 @@ const st = {
   stationAt: null as string | null, // the part of the Bothy you're standing at
   names: false, // show the names of things on the table
   famDraft: { kind: "cat" as "cat" | "hound" | "hare" | "hen", name: "" },
+  findLog: "", // the nature find waiting to be named
   late: 0, // logging for an earlier day: how many days back (0 is today)
   motion: { grind: 0, boil: 0, notch: 0 }, // when each ritual started
 };
@@ -111,6 +112,7 @@ async function logAction(actionId: string, extra: Partial<Log> = {}) {
   else if (aw.week) toast(`${a.name}: a whole week kept. The notches bundle in · ${parts}`);
   else if (aw.rhythm) toast(`${a.name}: notched, a rhythm · ${parts}`);
   else toast(`${a.name}: ground in · ${parts}`);
+  if (a.id === "nature") { st.findLog = l.id; st.queue.unshift("findkind"); if (st.sheet === "log") st.sheet = null; }
   if (a.room === "the familiars' pen" && !(st.s.familiars ?? []).length) { st.famDraft = { kind: "cat", name: "" }; st.queue.unshift("familiar"); if (st.sheet === "log") st.sheet = null; }
   if (atTable()) { st.motion.grind = performance.now(); if (st.sheet === "log") st.sheet = null; if (st.queue.some((q) => q && typeof q === "object" && "level" in q)) st.motion.boil = performance.now(); }
   if (st.queue.length && (st.sheet === null || st.sheet === "log")) nextSheet();
@@ -804,6 +806,9 @@ function sheet() {
   if (sh === "notes") return notesSheet();
   if (sh === "paperask") return paperAskSheet();
   if (sh === "familiar") return familiarSheet();
+  if (sh === "findkind") return sheetWrap("What did you find?", `<p class="blurb">It goes in a jar on the Glasshouse shelves.</p>
+    <div class="chips wrap">${["bird", "plant", "flower", "creature", "stone"].map((k) => `<button class="chip" data-act="find-kind" data-arg="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
+    <button class="ghost wide" data-act="find-kind" data-arg="">Just a find</button>`);
   if (sh === "glean") return gleanSheet();
   if ("found" in sh) return foundSheet(sh.found);
   if ("level" in sh) return levelSheet(sh.level);
@@ -894,7 +899,8 @@ function render() {
   if (document.getElementById("room")) attachRoom();
   if (document.getElementById("table")) attachTable();
   const icv = document.getElementById("interior") as HTMLCanvasElement | null;
-  if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4, { finished: st.s.logs.filter((l) => !l.deleted && l.action === "finish-book").length, shipped: st.s.logs.filter((l) => !l.deleted && l.action === "ship").length, poems: st.s.logs.filter((l) => !l.deleted && l.action === "poem").length });
+  if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4, { finished: st.s.logs.filter((l) => !l.deleted && l.action === "finish-book").length, shipped: st.s.logs.filter((l) => !l.deleted && l.action === "ship").length, poems: st.s.logs.filter((l) => !l.deleted && l.action === "poem").length,
+    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain") });
   document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
@@ -931,6 +937,7 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "station": st.station = Number(arg); break;
     case "log": if (st.sheet === "tally") st.motion.notch = performance.now(); await logAction(arg); return;
     case "noop": return;
+    case "find-kind": { const l = st.s.logs.find((x) => x.id === st.findLog); if (l && arg) { l.kind = arg; await commit(); } st.sheet = null; nextSheet(); render(); return; }
     case "paper": st.s.settings = { ...st.s.settings, paper: arg === "yes", updated: Date.now() }; await commit(); st.sheet = "journal"; break;
     case "set-paper": st.s.settings = { ...st.s.settings, paper: !st.s.settings.paper, updated: Date.now() }; await commit(); break;
     case "set-press": st.s.settings = { ...st.s.settings, press: !st.s.settings.press, updated: Date.now() }; await commit(); break;

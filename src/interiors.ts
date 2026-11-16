@@ -169,7 +169,8 @@ function oghamMark(x: number, y: number, o: Og): number {
   }
   return (o.n - 1) * 4 + 2;
 }
-let extra = { finished: 0, shipped: 0, poems: 0 }, ringAt = 0, lastFinished = -1;
+type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean };
+let extra: Counts = { finished: 0, shipped: 0, poems: 0, finds: [], season: "autumn", samhain: false }, ringAt = 0, lastFinished = -1;
 function rect2(x0: number, y0: number, x1: number, y1: number): Pt[] { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
 function books(x0: number, x1: number, y: number, seed: number) {
   let x = x0, k = 0;
@@ -695,6 +696,140 @@ function bardsThings(rooms: Rooms, t: number): { depth: number; draw: () => void
 }
 const bardsBand = (i: number): [number, number, number, number] => i === 0 ? [0, BL.gy - 200, BL.w, BL.gy + 14] : i === 1 ? [BL.x0, BL.gy + 14, BL.x1, BL.cf + 10] : [BL.x0, BL.apex - 20, BL.x1, BL.gy];
 
+// ---------- the Wildwood: a clearing in the wood, not a building. It follows the real seasons. ----------
+// The Wort Garden on the left, the Glasshouse of finds on the right, a lone hawthorn between, the lake in front.
+const WW = { w: 820, h: 640, gy: 470, lake: 500 };
+const WILD_SPOTS: Spot[] = [
+  { room: "the Wort Garden", at: [0, 0], hot: [0, 0], name: "the Wort Garden" },
+  { room: "the Glasshouse", at: [0, 0], hot: [0, 0], name: "the Glasshouse" },
+];
+export type Season = "spring" | "summer" | "autumn" | "winter";
+export function seasonOf(d: Date): Season { const m = d.getMonth(); return m >= 2 && m <= 4 ? "spring" : m >= 5 && m <= 7 ? "summer" : m >= 8 && m <= 10 ? "autumn" : "winter"; }
+function pine(x: number, y: number, s: number, fill: string, snow: boolean) {
+  const pts: Pt[] = [[x, y - 70 * s], [x - 9 * s, y - 52 * s], [x - 5 * s, y - 52 * s], [x - 15 * s, y - 32 * s], [x - 8 * s, y - 32 * s], [x - 20 * s, y - 8 * s], [x + 20 * s, y - 8 * s], [x + 8 * s, y - 32 * s], [x + 15 * s, y - 32 * s], [x + 5 * s, y - 52 * s], [x + 9 * s, y - 52 * s]];
+  line([[x, y], [x, y - 8 * s]], 2.2 * s); poly(pts, fill, 1.8);
+  if (snow) for (const [a, b] of [[0, 1], [3, 4], [5, 6]] as [number, number][]) { const p = pts[a], q = pts[b]; line([[p[0], p[1] + 1], [q[0], q[1] + 1]], 3 * s, "#fbfaf6"); }
+}
+function wildStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, se = extra.season, snow = se === "winter", { gy, lake } = WW;
+  c.fillStyle = snow ? "#dcd9d3" : "#d4cfc7"; c.fillRect(0, 0, WW.w, WW.h);
+  for (let k = 0; k < 1000; k++) { c.fillStyle = "rgba(30,28,26,.05)"; c.fillRect(h2(k, 1) * WW.w, h2(k, 2) * WW.h, 1.4, 1.4); }
+  // the far wood: dark, close-set, deepest behind
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 26; k++) {
+    const x = -10 + k * 33 + (r % 2) * 16 + h2(k, r) * 10, y = 250 + r * 60 + h2(r, k) * 14, s = 1.3 - r * 0.15;
+    if (r === 2 && x > 230 && x < 590) continue; // the clearing opens in front
+    pine(x, y, s, r === 0 ? "#6f6b65" : r === 1 ? "#8d887f" : "#aaa59d", snow);
+  }
+  // the clearing's ground
+  poly([[0, gy - 30], [200, gy - 18], [420, gy - 26], [640, gy - 16], [820, gy - 28], [820, lake + 20], [0, lake + 20]], snow ? "#f4f3ef" : se === "autumn" ? "#d9d0bf" : "#dcd8cd", 2.2);
+  if (!snow) for (let k = 0; k < 120; k++) { const x = h2(k, 3) * 820, y = gy - 20 + h2(k, 4) * 46; c.strokeStyle = "#8f8a83"; c.lineWidth = 1.1; c.beginPath(); c.moveTo(x - 3, y); c.lineTo(x - 1, y - 4); c.lineTo(x + 1, y); c.lineTo(x + 3, y - 5); c.stroke(); }
+  // the lake, across the front
+  poly([[0, lake + 6], [820, lake], [820, 640], [0, 640]], snow ? "#c9ccce" : "#b9b6b0", 2.4);
+  for (let k = 0; k < 16; k++) { const x = 30 + h2(k, 9) * 760, y = lake + 30 + h2(k, 8) * 90; line([[x - 10, y], [x - 4, y - 2], [x + 2, y], [x + 8, y - 2]], 1.2, "#6d6862"); }
+  if (snow) { poly([[0, lake + 6], [820, lake], [820, lake + 26], [500, lake + 34], [200, lake + 24], [0, lake + 30]], "#e9ecee", 1.4); for (let k = 0; k < 8; k++) line([[60 + k * 95, lake + 14], [80 + k * 95, lake + 24]], 1, "#9d988f"); }
+  // reeds at the water's edge
+  for (const [x0, n] of [[20, 9], [690, 10]] as [number, number][]) for (let k = 0; k < n; k++) { const x = x0 + k * 11, h = 34 + h2(k, x0) * 26; line([[x, lake + 16], [x + 3, lake + 16 - h]], 1.4, snow ? "#9d988f" : "#6d6862"); if (k % 3 === 0) poly([[x + 1, lake + 10 - h], [x + 5, lake + 10 - h], [x + 5, lake + 22 - h], [x + 1, lake + 22 - h]], "#6f6252", 0.8); }
+  if (!open("the Wort Garden")) chalkAt(200, gy - 8);
+  if (!open("the Glasshouse")) chalkAt(620, gy - 8);
+}
+function hawthorn(x: number, y: number, se: Season, t: number) {
+  // a lone thorn: never cut, it belongs to the good people
+  c.lineWidth = 7; c.strokeStyle = INK; c.lineCap = "round";
+  const limbs: [number, number, number, number][] = [[0, 0, -6, -60], [-6, -60, -40, -96], [-6, -60, 26, -104], [26, -104, 56, -120], [-40, -96, -62, -110], [26, -104, 14, -136], [-40, -96, -30, -128]];
+  for (const [a, b, c2, d] of limbs) { c.beginPath(); c.moveTo(x + a, y + b); c.lineTo(x + c2, y + d); c.stroke(); }
+  c.lineWidth = 4; c.strokeStyle = "#5f5b55"; for (const [a, b, c2, d] of limbs) { c.beginPath(); c.moveTo(x + a, y + b); c.lineTo(x + c2, y + d); c.stroke(); }
+  const crown: Pt[] = [[x - 70, y - 104], [x - 46, y - 140], [x, y - 152], [x + 48, y - 146], [x + 72, y - 118], [x + 40, y - 92], [x - 30, y - 88]];
+  if (se === "winter") { for (const [a, b, c2, d] of limbs.slice(1)) line([[x + c2 - 4, y + d - 2], [x + c2 + 4, y + d - 4]], 3, "#fbfaf6"); return; }
+  const leaf = se === "autumn" ? "rgba(143,136,128,.55)" : "rgba(125,120,113,.75)";
+  for (let k = 0; k < 26; k++) { const px = x - 60 + h2(k, 7) * 126, py = y - 148 + h2(k, 8) * 58; ell(px, py, 9, 6, leaf); }
+  for (let k = 0; k < 26; k++) { const px = x - 60 + h2(k, 17) * 126, py = y - 148 + h2(k, 18) * 58; c.beginPath(); c.ellipse(px, py, 8, 5, 0, 0, Math.PI * 2); c.strokeStyle = "#3d3934"; c.lineWidth = 0.9; c.stroke(); }
+  void crown;
+  if (se === "spring") for (let k = 0; k < 40; k++) ell(x - 62 + h2(k, 27) * 130, y - 150 + h2(k, 28) * 60, 2.4, 2.4, "#fbfaf6", 0.6);
+  if (se === "autumn") { for (let k = 0; k < 22; k++) ell(x - 58 + h2(k, 37) * 120, y - 146 + h2(k, 38) * 56, 2.6, 2.6, RED_HAW, 0.6);
+    for (let k = 0; k < 4; k++) { const ph = (t * 0.12 + k / 4) % 1; ell(x - 40 + k * 26 + Math.sin(t + k) * 10, y - 100 + ph * 104, 4, 2.4, "#9d988f", 0.8); } }
+}
+const RED_HAW = "#d2483a";
+function wildThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, se = extra.season, snow = se === "winter", out: { depth: number; draw: () => void }[] = [], { gy, lake } = WW;
+  out.push({ depth: 0, draw: () => hawthorn(420, gy - 22, se, t) });
+  // the Wort Garden: wattle-edged beds, a bee skep, a water butt, a scarecrow
+  if (open("the Wort Garden")) out.push({ depth: 1, draw: () => {
+    for (let b = 0; b < 3; b++) {
+      const bx0 = 60 + b * 78, bx1 = bx0 + 66, by = gy - 4 + (b % 2) * 6;
+      poly(rect2(bx0, by - 16, bx1, by), "#a8977a", 1.8); for (let x = bx0 + 4; x < bx1; x += 7) line([[x, by - 16], [x + 3, by]], 0.9, "#6f6252");
+      poly(rect2(bx0 + 2, by - 20, bx1 - 2, by - 16), snow ? "#fbfaf6" : "#6f6252", 1.2);
+      if (!snow) for (let k = 0; k < 5; k++) {
+        const px = bx0 + 9 + k * 12, base = by - 20;
+        if (se === "spring") { line([[px, base], [px, base - 7]], 1.2, "#5f5b55"); ell(px - 3, base - 8, 3, 1.6, "#9d988f"); ell(px + 3, base - 8, 3, 1.6, "#9d988f"); }
+        else if (se === "summer") { line([[px, base], [px, base - 20]], 1.2, "#5f5b55"); for (let q = 0; q < 3; q++) ell(px + (q % 2 ? 4 : -4), base - 6 - q * 5, 4, 2.2, "#8d887f", 0.6); if (b === 1) ell(px, base - 22, 3, 3, "#fbfaf6", 0.8); }
+        else { if (b === 2 && k % 2 === 0) ell(px, base - 6, 7, 6, "#c9b48c", 1.2); else { line([[px, base], [px - 3, base - 12]], 1.1, "#8d887f"); line([[px, base], [px + 4, base - 10]], 1.1, "#8d887f"); } }
+      }
+    }
+    // the skep on its stand, bees about it in summer
+    const sx = 300, sy = gy - 26;
+    line([[sx - 14, gy], [sx - 14, sy]], 2.4); line([[sx + 14, gy], [sx + 14, sy]], 2.4); poly(rect2(sx - 20, sy - 4, sx + 20, sy), "#8d7a62", 1.6);
+    const sk: Pt[] = [[sx - 18, sy - 4], [sx - 18, sy - 18], [sx - 12, sy - 32], [sx, sy - 38], [sx + 12, sy - 32], [sx + 18, sy - 18], [sx + 18, sy - 4]]; poly(sk, "#d7d0c1", 1.8);
+    for (let k = 1; k < 5; k++) line([[sx - 18 + k * 1.5, sy - 4 - k * 7], [sx + 18 - k * 1.5, sy - 4 - k * 7]], 1, "#8f897d");
+    if (snow) line([[sx - 12, sy - 34], [sx + 12, sy - 34]], 4, "#fbfaf6");
+    ell(sx, sy - 8, 4, 3, "#3a3733");
+    if (se === "summer") for (let k = 0; k < 5; k++) { const a = t * 2 + k * 1.3; ell(sx + Math.cos(a) * 26, sy - 22 + Math.sin(a * 1.4) * 14, 1.8, 1.4, "#3a3733"); }
+    // the scarecrow in an old coat
+    const cx = 30, cy = gy - 10;
+    line([[cx, cy], [cx, cy - 90]], 3); line([[cx - 26, cy - 66], [cx + 26, cy - 66]], 3);
+    poly([[cx - 22, cy - 68], [cx + 22, cy - 68], [cx + 16, cy - 30], [cx - 16, cy - 30]], "#6f6b65", 1.6); ell(cx, cy - 82, 9, 10, "#d7d0c1", 1.6); poly([[cx - 14, cy - 88], [cx + 14, cy - 88], [cx + 8, cy - 100], [cx - 8, cy - 100]], "#3a3733", 1.4);
+    // the gatepost, with a turnip lantern at Samhain
+    const gx = 340; poly(rect2(gx - 5, gy - 54, gx + 5, gy), "#8d7a62", 1.6);
+    if (extra.samhain) { ell(gx, gy - 64, 11, 10, "#e3dfd8", 1.6); poly([[gx - 5, gy - 66], [gx - 2, gy - 70], [gx - 1, gy - 64]], "#3a3733", 0.8); poly([[gx + 1, gy - 64], [gx + 2, gy - 70], [gx + 5, gy - 66]], "#3a3733", 0.8); line([[gx - 5, gy - 60], [gx, gy - 58], [gx + 5, gy - 60]], 1.2); c.globalAlpha = 0.25; ell(gx, gy - 62, 22, 20, "#d2483a"); c.globalAlpha = 1; }
+  } });
+  // the Glasshouse: leaded panes on a hazel frame, and shelves of finds under bell jars
+  if (open("the Glasshouse")) out.push({ depth: 1, draw: () => {
+    const x0 = 520, x1 = 740, y1 = gy - 2, y0 = gy - 150, peak = gy - 196;
+    const body = rect2(x0, y0, x1, y1);
+    poly(body, "rgba(236,240,238,.55)", 2.6);
+    // shelves of finds
+    const finds = extra.finds.slice(-12);
+    for (let s2 = 0; s2 < 2; s2++) {
+      const sy = y0 + 60 + s2 * 56; poly(rect2(x0 + 10, sy, x1 - 10, sy + 5), "#8d7a62", 1.4);
+      for (let k = 0; k < 6; k++) {
+        const kind = finds[s2 * 6 + k]; const jx = x0 + 30 + k * 32, jb = sy;
+        if (!kind) { if (s2 * 6 + k === finds.length) { c.setLineDash([2, 3]); poly([[jx - 10, jb], [jx + 10, jb], [jx + 10, jb - 24], [jx, jb - 30], [jx - 10, jb - 24]], null, 1, "#9d988f"); c.setLineDash([]); } continue; }
+        specimen(kind, jx, jb);
+        poly([[jx - 11, jb], [jx + 11, jb], [jx + 11, jb - 24], [jx + 6, jb - 30], [jx - 6, jb - 30], [jx - 11, jb - 24]], "rgba(225,230,229,.35)", 1.3); ell(jx, jb - 32, 3, 2.4, "rgba(225,230,229,.6)", 1);
+      }
+    }
+    // the leading, the frame, the glass roof
+    for (let x = x0 + 22; x < x1; x += 22) line([[x, y0], [x, y1]], 1, "#6d6862");
+    for (let y = y0 + 30; y < y1; y += 30) line([[x0, y], [x1, y]], 0.8, "#6d6862");
+    poly(body, null, 2.6); for (const x of [x0, x1]) line([[x, y1], [x, y0]], 4, "#8d7a62");
+    const roof: Pt[] = [[x0 - 10, y0], [(x0 + x1) / 2, peak], [x1 + 10, y0]]; poly(roof, "rgba(242,245,243,.7)", 2.4);
+    for (let k = 1; k < 8; k++) { const u = k / 8; line([[x0 - 10 + u * (x1 - x0 + 20), y0], [(x0 + x1) / 2, peak]], 0.8, "#6d6862"); }
+    if (snow) { poly([[x0 - 12, y0 - 2], [(x0 + x1) / 2, peak - 4], [x1 + 12, y0 - 2], [x1 - 10, y0 - 8], [(x0 + x1) / 2, peak + 8], [x0 + 10, y0 - 8]], "#fbfaf6", 1.4); }
+    // a door of glass, ajar
+    poly(rect2(x0 + 8, y1 - 74, x0 + 40, y1), "rgba(236,240,238,.6)", 1.8); ell(x0 + 34, y1 - 38, 2, 2, "#c9b48c");
+    if (!finds.length) { c.font = `italic 12px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.fillText("a jar for each find", (x0 + x1) / 2, y0 + 30); }
+  } });
+  // the heron at the water, and geese going over in autumn
+  out.push({ depth: 2, draw: () => {
+    const hx = 640, hy = lake + 40;
+    line([[hx, hy], [hx - 2, hy - 30]], 1.6); line([[hx + 4, hy], [hx + 3, hy - 30]], 1.6);
+    poly([[hx - 12, hy - 30], [hx + 16, hy - 32], [hx + 10, hy - 52], [hx - 4, hy - 50]], "#bdb8b0", 1.6);
+    c.lineWidth = 2.4; c.strokeStyle = INK; c.beginPath(); c.moveTo(hx + 8, hy - 50); c.quadraticCurveTo(hx + 2, hy - 66, hx + 10, hy - 76); c.stroke(); ell(hx + 12, hy - 78, 5, 4, "#bdb8b0", 1.4); line([[hx + 16, hy - 78], [hx + 30, hy - 76]], 1.8);
+    if (se === "autumn") for (let k = 0; k < 5; k++) { const gx = ((t * 18 + k * 18) % 900) - 40, gyy = 80 + Math.abs(k - 2) * 12; line([[gx - 6, gyy + 2], [gx, gyy], [gx + 6, gyy + 2]], 1.6); }
+    if (snow) for (let k = 0; k < 40; k++) { const ph = (t * 0.05 + h2(k, 3)) % 1; ell(h2(k, 1) * 820 + Math.sin(t + k) * 6, ph * 640, 1.6, 1.6, "#fbfaf6"); }
+    if (extra.samhain) for (let k = 0; k < 6; k++) { const wx = ((t * 6 + k * 150) % 980) - 80, wy = gy - 30 - (k % 3) * 18; c.globalAlpha = 0.6; ell(wx, wy, 90, 10, "#f4f2ed"); c.globalAlpha = 1; }
+  } });
+  return out;
+}
+function specimen(kind: string, x: number, b: number) {
+  if (kind === "bird") { poly([[x - 2, b - 2], [x + 2, b - 2], [x + 5, b - 18], [x + 1, b - 26], [x - 3, b - 18]], "#e3dfd8", 1); line([[x, b - 2], [x + 1, b - 24]], 0.8); }
+  else if (kind === "plant") { poly([[x, b - 2], [x - 7, b - 12], [x, b - 24], [x + 7, b - 12]], "#9d988f", 1); line([[x, b - 2], [x, b - 22]], 0.8); }
+  else if (kind === "flower") { line([[x, b - 2], [x, b - 16]], 1); for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2; ell(x + Math.cos(a) * 4, b - 20 + Math.sin(a) * 4, 2.6, 2.6, "#fbfaf6", 0.8); } ell(x, b - 20, 2, 2, "#c9b48c"); }
+  else if (kind === "creature") { ell(x, b - 12, 3, 7, "#3a3733"); poly([[x - 2, b - 12], [x - 10, b - 20], [x - 8, b - 8]], "#bdb8b0", 0.9); poly([[x + 2, b - 12], [x + 10, b - 20], [x + 8, b - 8]], "#bdb8b0", 0.9); }
+  else if (kind === "stone") { ell(x, b - 6, 8, 5, "#aaa59d", 1.2); ell(x - 2, b - 7, 2, 2, "#5f5b55"); }
+  else { ell(x, b - 6, 9, 5, "#a8977a", 1); for (let k = 0; k < 3; k++) ell(x - 4 + k * 4, b - 9, 2.2, 3, "#ece8e0", 0.8); }
+}
+const wildBand = (i: number): [number, number, number, number] => i === 0 ? [0, 280, 380, WW.lake + 20] : [480, 260, 820, WW.lake + 20];
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -723,6 +858,12 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     stand: (i) => i === 0 ? [190, BL.gy, 0.6] : i === 1 ? [BL.x0 + 118, BL.cf, 0.55] : [BL.x1 - 90, BL.gy, 0.6],
     labelAt: (i) => i === 0 ? [150, BL.gy - 200] : i === 1 ? [(BL.x0 + BL.x1) / 2 + 40, BL.gy + 34] : [(BL.x0 + BL.x1) / 2, BL.eave - 4],
   },
+  "wildwood": {
+    spots: WILD_SPOTS, still: wildStill, things: wildThings, front: () => {}, size: [WW.w, WW.h],
+    hit: (x, y) => [0, 1].find((i) => { const [a, b, c2, d] = wildBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
+    stand: (i) => i === 0 ? [250, WW.gy + 4, 0.6] : [470, WW.gy + 4, 0.6],
+    labelAt: (i) => i === 0 ? [180, WW.gy - 150] : [630, WW.gy - 216],
+  },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],
     hit: (x, y) => (x < TOWER.x0 - 40 || x > TOWER.x1 + 40 ? -1 : [0, 1, 2].find((i) => { const [a, b] = towerBand(i); return y >= a - 10 && y <= b + 10; }) ?? -1),
@@ -734,7 +875,7 @@ export const hasScene = (id: BuildingId) => !!SCENES[id];
 export const sceneRooms = (id: BuildingId) => SCENES[id]?.spots.map((s) => s.room) ?? [];
 
 let raf = 0;
-export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Rooms, selected: number, look: GuiserOpts, onTap: (i: number) => void, labels: boolean, counts: { finished: number; shipped: number; poems: number } = { finished: 0, shipped: 0, poems: 0 }) {
+export function attachInterior(cv: HTMLCanvasElement, id: BuildingId, rooms: Rooms, selected: number, look: GuiserOpts, onTap: (i: number) => void, labels: boolean, counts: Counts = extra) {
   const finished = counts.finished;
   // a newly finished book rings the bell
   if (lastFinished >= 0 && finished > lastFinished) ringAt = performance.now();

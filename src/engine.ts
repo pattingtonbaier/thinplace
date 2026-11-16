@@ -53,6 +53,7 @@ export interface Log {
   note?: string;
   withSomeone?: boolean;
   habit?: string;
+  kind?: string; // for nature finds: bird, plant, flower, creature or stone
   late?: number; // added later for an earlier day (a relic allows it); ts is set back to that day
   deleted?: number; // a tombstone, so a deletion survives a merge
 }
