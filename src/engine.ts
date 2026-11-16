@@ -54,6 +54,8 @@ export interface Log {
   withSomeone?: boolean;
   habit?: string;
   kind?: string; // for nature finds: bird, plant, flower, creature or stone
+  who?: string[]; // for time with friends: initials or nicknames, kept only in the save
+  place?: string; // for eating out: the name of the place
   late?: number; // added later for an earlier day (a relic allows it); ts is set back to that day
   deleted?: number; // a tombstone, so a deletion survives a merge
 }
@@ -350,6 +352,7 @@ export function merge(a: Save, b: Save): Save {
     const prev = logs.get(l.id);
     if (!prev) logs.set(l.id, l);
     else if (l.deleted && !prev.deleted) logs.set(l.id, l);
+    else if (!l.deleted && !prev.deleted) logs.set(l.id, { ...l, ...prev, kind: prev.kind ?? l.kind, who: prev.who ?? l.who, place: prev.place ?? l.place });
   }
   out.logs = [...logs.values()].sort((x, y) => x.ts - y.ts);
 

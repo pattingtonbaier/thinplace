@@ -169,7 +169,9 @@ function oghamMark(x: number, y: number, o: Og): number {
   }
   return (o.n - 1) * 4 + 2;
 }
-type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean };
+export type Hall = { cups: string[]; signs: { name: string; n: number }[]; unnamedEats: number; guests: number; games: number; serve: number; hour: number; dow: number };
+type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall };
+const NO_HALL: Hall = { cups: [], signs: [], unnamedEats: 0, guests: 0, games: 0, serve: 0, hour: 12, dow: 3 };
 let extra: Counts = { finished: 0, shipped: 0, poems: 0, finds: [], season: "autumn", samhain: false }, ringAt = 0, lastFinished = -1;
 function rect2(x0: number, y0: number, x1: number, y1: number): Pt[] { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
 function books(x0: number, x1: number, y: number, seed: number) {
@@ -830,6 +832,220 @@ function specimen(kind: string, x: number, b: number) {
 }
 const wildBand = (i: number): [number, number, number, number] => i === 0 ? [0, 280, 380, WW.lake + 20] : [480, 260, 820, WW.lake + 20];
 
+
+// ---------- the Feasting Halls: a bruidean at the crossroads, opened lengthwise ----------
+// A door on each road, a cauldron never let go empty, and a seat kept for the stranger.
+// It follows the real clock: swept and quiet in the morning, banked in the evening, full on Friday and Saturday nights.
+const FH = { w: 820, h: 640, gy: 500, x0: 40, x1: 780, wall: 22, eave: 236, ridge: 118, beam: 262 };
+const FEAST_SPOTS: Spot[] = [
+  { room: "the long tables", at: [0, 0], hot: [0, 0], name: "the long tables" },
+  { room: "Restaurants", at: [0, 0], hot: [0, 0], name: "the inn signs" },
+  { room: "the Moot Hall", at: [0, 0], hot: [0, 0], name: "the Moot Hall" },
+  { room: "Fidchell Hall", at: [0, 0], hot: [0, 0], name: "Fidchell Hall" },
+];
+type Mood = "morning" | "day" | "evening" | "night" | "feast";
+function moodOf(h: number, d: number): Mood {
+  if (((d === 5 || d === 6) && h >= 18) || ((d === 6 || d === 0) && h < 2)) return "feast";
+  return h >= 6 && h < 12 ? "morning" : h >= 12 && h < 17 ? "day" : h >= 17 && h < 22 ? "evening" : "night";
+}
+const hallOf = () => extra.hall ?? NO_HALL;
+const moodNow = () => moodOf(hallOf().hour, hallOf().dow);
+const SKY: Record<Mood, string> = { morning: "#e8e5de", day: "#dcd8d0", evening: "#a19c94", night: "#4f4c47", feast: "#4f4c47" };
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function feastStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { gy, x0, x1, wall, eave, ridge, beam } = FH, ix0 = x0 + wall, ix1 = x1 - wall, m = moodNow(), dark = m === "night" || m === "feast";
+  c.fillStyle = SKY[m]; c.fillRect(0, 0, FH.w, FH.h);
+  if (dark) for (let k = 0; k < 40; k++) ell(h2(k, 5) * 820, h2(k, 6) * 120, 1.1, 1.1, "#e9e5dc");
+  else for (let k = 0; k < 800; k++) { c.fillStyle = "rgba(30,28,26,.05)"; c.fillRect(h2(k, 1) * FH.w, h2(k, 2) * FH.h, 1.4, 1.4); }
+  // the thatch, seen over the cut: the far slope of the roof
+  const thatch: Pt[] = [[x0 - 30, eave + 10], [x0 + 46, ridge - 8], [x1 - 46, ridge - 8], [x1 + 30, eave + 10]];
+  poly(thatch, "#77736d", 2.6);
+  clipTo(thatch, () => { for (let y = ridge - 10; y < eave + 12; y += 8) for (let x = (y / 8) % 2 ? 0 : 7; x < 820; x += 14) line([[x, y], [x + 3, y + 9]], 0.9, "#4c4945"); });
+  poly(thatch, null, 2.6); line([[x0 + 40, ridge - 8], [x1 - 40, ridge - 8]], 6, "#3a3733");
+  // its underside, rafters running up to the ridge, and the smoke hole
+  const under: Pt[] = [[ix0, eave], [x0 + 60, ridge + 14], [x1 - 60, ridge + 14], [ix1, eave]];
+  poly(under, dark ? "#a49d91" : "#c9c1b3", 1.6);
+  clipTo(under, () => {
+    for (let k = 0; k < 900; k++) { const x = ix0 + h2(k, 31) * (ix1 - ix0), y = ridge + 14 + h2(k, 32) * (eave - ridge - 14); line([[x, y], [x + 2, y + 7]], 0.9, "#8f8676"); }
+    for (let x = ix0 + 30; x < ix1; x += 72) { line([[x, eave], [x + (410 - x) * 0.06, ridge + 14]], 7, "#6f6252"); line([[x, eave], [x + (410 - x) * 0.06, ridge + 14]], 2.4, "#8d7a62"); }
+    line([[0, (ridge + eave) / 2 + 8], [820, (ridge + eave) / 2 + 8]], 4, "#6f6252");
+  });
+  poly([[392, ridge + 14], [428, ridge + 14], [432, ridge - 10], [388, ridge - 10]], SKY[m], 1.6);
+  // the back wall: wattle and daub between posts, with the daub fallen away in places
+  poly(rect2(ix0, eave, ix1, gy), dark ? "#cfc8bb" : "#e6e1d7", 0);
+  for (const [px, py] of [[700, 272]] as Pt[]) { const R = rect2(px, py, px + 44, py + 30); poly(R, "#c9b48c", 1); clipTo(R, () => { for (let x = px - 6; x < px + 50; x += 8) line([[x, py], [x, py + 30]], 1.6, "#8d7a62"); for (let y = py + 4; y < py + 30; y += 6) line([[px, y], [px + 44, y]], 1, "#6f6252"); }); }
+  for (const x of [174, 236, 410, 686]) poly(rect2(x - 5, eave, x + 5, gy), "#8d7a62", 1.8);
+  poly(rect2(ix0, eave - 6, ix1, eave + 4), "#6f6252", 2);
+  // the long beam the signs and the cauldron hang from
+  poly(rect2(ix0, beam - 5, ix1, beam + 5), "#6f6252", 2.2);
+  // the floor, strewn with rushes, and the ground cut through below
+  poly([[0, gy], [820, gy], [820, FH.h], [0, FH.h]], "#bdb7ac", 2.4); hatch([[0, gy + 14], [820, gy + 14], [820, FH.h], [0, FH.h]], 6, "#8d887f");
+  poly(rect2(ix0, gy, ix1, gy + 10), "#d6cfbf", 1.4);
+  for (let k = 0; k < 90; k++) { const x = ix0 + h2(k, 21) * (ix1 - ix0), y = gy + 2 + h2(k, 22) * 7; line([[x, y], [x + 8 + h2(k, 3) * 6, y - 1 + h2(k, 4) * 2]], 1, "#8f897d"); }
+  // the end walls in section, each with its door onto a road
+  for (const [a, b] of [[x0, ix0], [ix1, x1]] as Pt[]) { coursed(rect2(a, eave, b, gy), a, b, eave, gy); poly(rect2(a - 1, gy - 112, b + 1, gy), SKY[m], 0); line([[a - 1, gy - 112], [b + 1, gy - 112]], 4, "#6f6252"); }
+  // the roads, running in from either side
+  for (const [a, b] of [[0, x0], [x1, 820]] as Pt[]) for (let x = a + 4; x < b; x += 12) ell(x, gy + 5, 5, 3, "#d6d1c8", 1);
+  if (m === "morning") for (const [a, dir] of [[ix0, 1], [ix1, -1]] as Pt[]) { c.globalAlpha = 0.35; poly([[a, gy], [a + dir * 90, gy + 9], [a + dir * 90, gy + 2], [a, gy - 2]], "#f7f3e8", 0); c.globalAlpha = 1; }
+  if (!open("the long tables")) chalkAt(300, gy - 12);
+  if (!open("Restaurants")) chalkAt(250, beam + 34);
+  if (!open("the Moot Hall")) chalkAt(160, gy - 12);
+  if (!open("Fidchell Hall")) chalkAt(680, gy - 12);
+}
+const CUP_PEGS = Array.from({ length: 13 }, (_, k) => 254 + k * 27).filter((x) => x < 390 || x > 430);
+const SIGN_AT = [104, 172, 240, 308, 512, 580, 648, 716];
+function mether(x: number, y: number) {
+  poly([[x - 8, y], [x + 8, y], [x + 7, y + 18], [x - 7, y + 18]], "#a8977a", 1.4);
+  line([[x - 8, y + 4], [x - 11, y + 7], [x - 8, y + 11]], 1.3); line([[x + 8, y + 4], [x + 11, y + 7], [x + 8, y + 11]], 1.3);
+  line([[x - 6, y + 9], [x + 6, y + 9]], 0.7, "#6f6252");
+}
+function guest(x: number, y: number, t: number, k: number) {
+  const b = Math.sin(t * 0.9 + k * 1.7) * 1.2;
+  c.globalAlpha = 0.5;
+  poly([[x - 15, y], [x - 12, y - 30 + b], [x - 6, y - 44 + b], [x, y - 49 + b], [x + 6, y - 44 + b], [x + 12, y - 30 + b], [x + 15, y]], "#5f5b55", 0);
+  ell(x, y - 34 + b, 6, 7, "#3a3733"); c.globalAlpha = 1;
+}
+function feastThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], { gy, beam } = FH, ix0 = FH.x0 + FH.wall, ix1 = FH.x1 - FH.wall, H = hallOf(), m = moodNow();
+  const lit = m === "feast" ? 1 : m === "evening" ? 0.5 : m === "night" ? 0.15 : 0;
+  // the mether cups on the wall pegs, one per friend, with their initials under
+  if (open("the long tables")) out.push({ depth: 0, draw: () => {
+    line([[244, 318], [584, 318]], 4, "#6f6252");
+    CUP_PEGS.forEach((x, k) => {
+      ell(x, 320, 2.4, 2.4, "#3a3733");
+      const who = H.cups[k]; if (!who) return;
+      mether(x, 324);
+      c.font = `italic 10px 'IM Fell English', Georgia, serif`; c.fillStyle = "#3a3733"; c.textAlign = "center"; c.textBaseline = "alphabetic";
+      c.fillText(who.length > 7 ? who.slice(0, 6) + "." : who, x, k % 2 ? 368 : 355);
+    });
+    if (H.cups.length > CUP_PEGS.length) { c.font = `italic 11px 'IM Fell English', Georgia, serif`; c.fillText(`and ${H.cups.length - CUP_PEGS.length} more on the far wall`, 410, 384); }
+    if (!H.cups.length) { c.font = `italic 13px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText("a cup is hung for each friend", 300, 348); }
+    // guests who've shared the hall in the last fortnight, sitting behind the tables
+    const seats = [264, 310, 356, 466, 512, 558], n = Math.min(seats.length, H.guests);
+    [0, 3, 1, 4, 2, 5].slice(0, n).forEach((k) => guest(seats[k], 432, t, k));
+    // the long tables on trestles, and benches on the near side
+    for (const [a, b] of [[238, 378], [442, 582]] as Pt[]) {
+      for (const x of [a + 14, b - 14]) { line([[x - 10, gy], [x, 434]], 3, "#6f6252"); line([[x + 10, gy], [x, 434]], 3, "#6f6252"); }
+      poly(rect2(a, 426, b, 436), "#8d7a62", 2);
+      // trenchers and cups along the board
+      for (let x = a + 20; x < b - 10; x += 34) { ell(x, 425, 9, 2.4, "#d7d0c1", 1); poly(rect2(x + 12, 416, x + 18, 425), "#a8977a", 1); }
+      // candles: all lit for a feast, a few in the evening
+      [a + 40, (a + b) / 2, b - 40].forEach((x, k) => { poly(rect2(x - 3, 408, x + 3, 425), "#ece8e0", 1); if (lit >= 1 || (lit >= 0.5 && k === 1)) flameAt(c, x, 407, 0.28, t + x); });
+      poly(rect2(a + 4, 462, b - 4, 470), "#8d7a62", 1.8); for (const x of [a + 12, b - 12]) line([[x, 470], [x, gy]], 2.6, "#6f6252");
+    }
+  } });
+  // the inn signs hung from the beam: one for each place you've eaten, brighter the more you go back
+  if (open("Restaurants")) out.push({ depth: 0, draw: () => {
+    const signs = H.signs.length ? H.signs : H.unnamedEats ? [{ name: "", n: H.unnamedEats }] : [];
+    SIGN_AT.forEach((x, k) => {
+      const sg = signs[k]; if (!sg) return;
+      const sw = Math.sin(t * 0.8 + k) * 0.035;
+      c.save(); c.translate(x, beam + 5); c.rotate(sw);
+      line([[-16, 0], [-16, 12]], 1.2); line([[16, 0], [16, 12]], 1.2);
+      poly(rect2(-31, 12, 31, 36), sg.n >= 3 ? "#f4eedf" : sg.n === 2 ? "#ddd6c8" : "#c9c2b4", 1.8);
+      poly(rect2(-27, 16, 27, 32), null, 0.8, "#6f6252");
+      c.font = `10px ${FELL_SC}`; c.fillStyle = INK; c.textAlign = "center"; c.textBaseline = "middle";
+      let name = sg.name; while (name.length > 3 && c.measureText(name).width > 50) name = name.slice(0, -1); if (name !== sg.name) name = name.slice(0, -1) + ".";
+      c.fillText(name || "an inn", 0, 24.5);
+      if (sg.n >= 3) ell(25, 34, 3.4, 3.4, "#d2483a", 0.8);
+      c.restore();
+    });
+    if (signs.length > SIGN_AT.length) { c.font = `italic 11px 'IM Fell English', Georgia, serif`; c.fillStyle = "#3a3733"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText(`and ${signs.length - SIGN_AT.length} more in the rafters`, 410, beam - 10); }
+    if (!signs.length) { c.font = `italic 13px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText("a sign is hung for each place you eat", 250, beam + 30); }
+  } });
+  // the hearth in the middle of the hall, and the cauldron that's never let go empty
+  out.push({ depth: 1, draw: () => {
+    line([[410, beam + 5], [410, 424]], 1.6, "#3a3733"); for (let y = beam + 10; y < 420; y += 7) ell(410, y, 1.6, 3, null, 0.9);
+    for (let k = 0; k < 7; k++) ell(380 + k * 10, gy - 3, 6, 4, "#aaa59d", 1.2);
+    const f = m === "feast" ? 0.62 : m === "day" ? 0.42 : m === "morning" ? 0.3 : m === "evening" ? 0.3 : 0.2;
+    if (m === "night") for (let k = 0; k < 5; k++) ell(396 + k * 7, gy - 8, 3, 2, "#d2483a"); else for (const dx of [-12, 0, 12]) flameAt(c, 410 + dx, gy - 6, f * (dx ? 0.8 : 1), t + dx);
+    line([[388, 426], [432, 426]], 1.6); c.beginPath(); c.moveTo(388, 426); c.quadraticCurveTo(386, 462, 410, 464); c.quadraticCurveTo(434, 462, 432, 426); c.closePath(); c.fillStyle = "#2a2724"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    ell(410, 426, 22, 4, "#4c4945", 1.6); line([[394, 466], [392, 474]], 2); line([[426, 466], [428, 474]], 2);
+    // steam off the pot, and smoke finding its way up and out of the hole in the thatch
+    const puffs = m === "feast" ? 7 : m === "night" ? 2 : 4;
+    for (let k = 0; k < puffs; k++) { const ph = (t * 0.07 + k / puffs) % 1, y = 418 - ph * 360, x = 410 + Math.sin(ph * 8 + k) * (10 + ph * 18); c.globalAlpha = (1 - ph) * 0.5; ell(x, y, 8 + ph * 18, 5 + ph * 8, "#ece8e0"); c.globalAlpha = 1; }
+    if (m === "feast") for (let k = 0; k < 3; k++) { const ph = (t * 0.3 + k / 3) % 1, nx = 680 + Math.sin(ph * 6 + k) * 12, ny = 360 - ph * 70; c.globalAlpha = 1 - ph; ell(nx, ny, 3.4, 2.6, "#3a3733"); line([[nx + 3, ny], [nx + 3, ny - 12]], 1.2); c.globalAlpha = 1; }
+  } });
+  // the guest seat by the left door, kept empty for the stranger
+  out.push({ depth: 1, draw: () => {
+    const x = ix0 + 22; line([[x - 10, gy], [x - 10, gy - 34]], 2.6); line([[x + 10, gy], [x + 10, gy - 34]], 2.6);
+    poly(rect2(x - 13, gy - 38, x + 13, gy - 32), "#8d7a62", 1.6); line([[x - 11, gy - 38], [x - 13, gy - 84]], 3); poly(rect2(x - 15, gy - 86, x - 9, gy - 60), "#8d7a62", 1.4);
+    if (m === "morning") { line([[ix1 - 14, gy], [ix1 - 4, gy - 96]], 2.4, "#6f6252"); poly([[ix1 - 22, gy], [ix1 - 6, gy], [ix1 - 10, gy - 22], [ix1 - 18, gy - 22]], "#c9b48c", 1.4); }
+  } });
+  // the Moot Hall: a dais at the end, the brehon's chair, and a hazel tally stick notched for each time you gave your hours
+  if (open("the Moot Hall")) out.push({ depth: 1, draw: () => {
+    const d0 = ix0 + 42, d1 = 228, top = gy - 22;
+    poly(rect2(d0, top, d1, gy), "#a8977a", 2); line([[d0, top + 8], [d1, top + 8]], 0.8, "#6f6252");
+    poly(rect2(d1, gy - 11, d1 + 12, gy), "#a8977a", 1.6);
+    const cx = d0 + 34;
+    poly([[cx - 18, top], [cx - 18, top - 120], [cx - 8, top - 136], [cx + 8, top - 136], [cx + 18, top - 120], [cx + 18, top - 40]], "#8d7a62", 2);
+    for (let k = 0; k < 3; k++) ell(cx, top - 112 + k * 22, 5, 5, null, 1);
+    poly(rect2(cx - 18, top - 44, cx + 34, top - 36), "#8d7a62", 1.8); line([[cx + 30, top - 36], [cx + 30, top]], 3);
+    // the stick in use, leaning on the wall
+    const sx = d1 - 24, notches = H.serve % 12, full = Math.floor(H.serve / 12);
+    line([[sx, top], [sx + 6, top - 130]], 6, "#6f6252"); line([[sx, top], [sx + 6, top - 130]], 3.4, "#c9b48c");
+    for (let k = 0; k < notches; k++) { const y = top - 12 - k * 10, x = sx + (130 - (top - y)) * 0 + ((top - y) / 130) * 6; line([[x - 4, y], [x + 4, y - 2]], 1.6); }
+    // full sticks, tied in a bundle by the chair
+    for (let k = 0; k < Math.min(6, full); k++) line([[cx + 44 + k * 3, top], [cx + 52 + k * 3, top - 96]], 3.4, "#8d7a62");
+    if (full) line([[cx + 44, top - 40], [cx + 62, top - 42]], 2.4, "#3a3733");
+    if (!H.serve) { c.font = `italic 12px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText("a notch for each time you serve", (d0 + d1) / 2 + 10, top - 150); }
+  } });
+  // Fidchell Hall: an alcove behind a wattle screen, the board on its stand, and full boards hung on the wall
+  if (open("Fidchell Hall")) out.push({ depth: 1, draw: () => {
+    // the wattle screen, cut through, with the way in below it
+    const sx = 600, S2 = rect2(sx - 7, beam + 5, sx + 7, gy - 150);
+    poly(S2, "#c9b48c", 1.8); clipTo(S2, () => { for (let y = beam + 5; y < gy - 150; y += 6) line([[sx - 7, y], [sx + 7, y + 4]], 1, "#6f6252"); }); poly(S2, null, 2);
+    line([[sx - 7, gy - 150], [sx - 7, gy]], 3, "#6f6252");
+    // the table, the stools and a candle
+    poly(rect2(632, gy - 52, 728, gy - 44), "#8d7a62", 2); for (const x of [640, 720]) line([[x, gy - 44], [x, gy]], 3, "#6f6252");
+    for (const x of [616, 744]) { poly(rect2(x - 10, gy - 30, x + 10, gy - 25), "#8d7a62", 1.4); line([[x - 6, gy - 25], [x - 8, gy]], 2); line([[x + 6, gy - 25], [x + 8, gy]], 2); }
+    poly(rect2(718, gy - 66, 724, gy - 52), "#ece8e0", 1); if (lit > 0) flameAt(c, 721, gy - 67, 0.26, t);
+    // the board, propped to face the room: seven by seven, a peg set for each game night
+    const bx = 646, by = gy - 122, cell = 9, pegs = H.games % 49;
+    line([[bx + 10, gy - 52], [bx + 18, by + 60]], 2.4, "#6f6252"); line([[bx + 54, gy - 52], [bx + 46, by + 60]], 2.4, "#6f6252");
+    poly(rect2(bx - 4, by - 4, bx + 7 * cell + 4, by + 7 * cell + 4), "#a8977a", 2);
+    for (let r = 0; r < 7; r++) for (let q = 0; q < 7; q++) {
+      const i = r * 7 + q, x = bx + q * cell + cell / 2, y = by + r * cell + cell / 2;
+      if (i === 24) { ell(x, y, 3.4, 3.4, "#c9b48c", 1); continue; }
+      const k = i < 24 ? i : i - 1;
+      if (k < pegs) ell(x, y, 2.8, 2.8, k % 2 ? "#f4f2ed" : "#2a2724", 0.8); else ell(x, y, 1.1, 1.1, "#6f6252");
+    }
+    // finished boards, hung on the alcove wall
+    for (let k = 0; k < Math.min(3, Math.floor(H.games / 49)); k++) { const x = 624 + k * 42; poly(rect2(x, 318, x + 30, 348), "#a8977a", 1.6); for (let q = 0; q < 16; q++) ell(x + 5 + (q % 4) * 6.5, 323 + Math.floor(q / 4) * 6.5, 1.8, 1.8, q % 2 ? "#f4f2ed" : "#2a2724"); }
+    if (!H.games) { c.font = `italic 12px 'IM Fell English', Georgia, serif`; c.fillStyle = "#5f5b55"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText("a peg for each game night", 688, by - 14); }
+  } });
+  return out;
+}
+function feastFront() {
+  const m = moodNow(), H = hallOf(), { gy, eave } = FH, ix0 = FH.x0 + FH.wall, ix1 = FH.x1 - FH.wall;
+  // the light: dark at the walls after nightfall, warm about the fire
+  const dim = m === "night" ? 0.58 : m === "evening" ? 0.34 : m === "feast" ? 0.2 : 0;
+  if (dim) {
+    const g = c.createRadialGradient(410, gy - 30, m === "feast" ? 120 : 30, 410, gy - 60, m === "feast" ? 460 : 340);
+    g.addColorStop(0, "rgba(20,18,16,0)"); g.addColorStop(1, `rgba(20,18,16,${dim})`);
+    c.fillStyle = g; c.fillRect(ix0, FH.eave, ix1 - ix0, gy - FH.eave + 10);
+    c.save(); c.beginPath(); c.rect(ix0, FH.eave, ix1 - ix0, gy - FH.eave + 10); c.clip();
+    const w = c.createRadialGradient(410, gy - 50, 10, 410, gy - 50, m === "feast" ? 300 : 150);
+    w.addColorStop(0, `rgba(243,217,168,${m === "feast" ? 0.3 : 0.16})`); w.addColorStop(1, "rgba(243,217,168,0)");
+    c.fillStyle = w; c.fillRect(ix0, FH.eave, ix1 - ix0, gy - FH.eave + 10); c.restore();
+  }
+  if (m === "morning") { c.globalAlpha = 0.16; poly([[392, FH.ridge + 14], [428, FH.ridge + 14], [520, gy], [450, gy]], "#fbf8f0", 0); c.globalAlpha = 1; }
+  void eave;
+  const day = DAYS[H.dow] ?? "";
+  const words: Record<Mood, string> = {
+    morning: `${day} morning. The rushes are swept and the fire is low.`,
+    day: `${day} afternoon. The hall is quiet; the pot keeps warm.`,
+    evening: `${day} evening. The fire is banked and a few candles are lit.`,
+    night: `Late. The embers are kept for whoever comes in off the road.`,
+    feast: `${H.dow === 0 || H.dow === 6 && H.hour < 2 ? "Late" : day} night. The hall is full of light.`,
+  };
+  c.font = `italic 14px 'IM Fell English', Georgia, serif`; c.fillStyle = "#3a3733"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText(words[m], 410, FH.h - 16);
+}
+const feastBand = (i: number): [number, number, number, number] => {
+  const ix0 = FH.x0 + FH.wall, ix1 = FH.x1 - FH.wall;
+  return i === 0 ? [236, 306, 592, FH.gy + 12] : i === 1 ? [ix0, FH.beam - 4, ix1, 306] : i === 2 ? [ix0, 306, 236, FH.gy + 12] : [592, 306, ix1, FH.gy + 12];
+};
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -863,6 +1079,12 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     hit: (x, y) => [0, 1].find((i) => { const [a, b, c2, d] = wildBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
     stand: (i) => i === 0 ? [250, WW.gy + 4, 0.6] : [470, WW.gy + 4, 0.6],
     labelAt: (i) => i === 0 ? [180, WW.gy - 150] : [630, WW.gy - 216],
+  },
+  "feasting-halls": {
+    spots: FEAST_SPOTS, still: feastStill, things: feastThings, front: feastFront, size: [FH.w, FH.h],
+    hit: (x, y) => [1, 0, 2, 3].find((i) => { const [a, b, c2, d] = feastBand(i); return x >= a && x <= c2 && y >= b && y <= d; }) ?? -1,
+    stand: (i) => i === 0 ? [300, FH.gy + 2, 0.6] : i === 1 ? [520, FH.gy + 2, 0.6] : i === 2 ? [190, FH.gy - 22, 0.6] : [680, FH.gy + 2, 0.6],
+    labelAt: (i) => i === 0 ? [410, FH.gy + 40] : i === 1 ? [300, FH.beam - 24] : i === 2 ? [150, FH.gy + 40] : [680, FH.gy + 40],
   },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],

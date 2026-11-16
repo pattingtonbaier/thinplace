@@ -19,7 +19,7 @@ import { ANCHORS, anchorScores, DILEMMAS, dilemmaTally, gaps, MIRROR, promptForD
 type View = "hollow" | "bothy";
 type Sheet =
   | null | "log" | "journal" | "gate" | "points" | "habits" | "settings" | "install" | "look" | "firstweek"
-  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind"
+  | "day" | "tally" | "embers" | "moons" | "relics" | "pack" | "cairn" | "book" | "notes" | "paperask" | "glean" | "familiar" | "findkind" | "who" | "where"
   | { found: BuildingId } | { level: number } | { relic: { ember: Ember; tier: number; swap?: boolean } };
 
 const st = {
@@ -46,6 +46,8 @@ const st = {
   names: false, // show the names of things on the table
   famDraft: { kind: "cat" as "cat" | "hound" | "hare" | "hen", name: "" },
   findLog: "", // the nature find waiting to be named
+  whoLog: "", whoDraft: [] as string[], // the gathering waiting for its guests
+  whereLog: "", // the meal out waiting for its place
   late: 0, // logging for an earlier day: how many days back (0 is today)
   motion: { grind: 0, boil: 0, notch: 0 }, // when each ritual started
 };
@@ -113,6 +115,8 @@ async function logAction(actionId: string, extra: Partial<Log> = {}) {
   else if (aw.rhythm) toast(`${a.name}: notched, a rhythm · ${parts}`);
   else toast(`${a.name}: ground in · ${parts}`);
   if (a.id === "nature") { st.findLog = l.id; st.queue.unshift("findkind"); if (st.sheet === "log") st.sheet = null; }
+  if (a.id === "friends") { st.whoLog = l.id; st.whoDraft = []; st.queue.unshift("who"); if (st.sheet === "log") st.sheet = null; }
+  if (a.id === "eat-out") { st.whereLog = l.id; st.queue.unshift("where"); if (st.sheet === "log") st.sheet = null; }
   if (a.room === "the familiars' pen" && !(st.s.familiars ?? []).length) { st.famDraft = { kind: "cat", name: "" }; st.queue.unshift("familiar"); if (st.sheet === "log") st.sheet = null; }
   if (atTable()) { st.motion.grind = performance.now(); if (st.sheet === "log") st.sheet = null; if (st.queue.some((q) => q && typeof q === "object" && "level" in q)) st.motion.boil = performance.now(); }
   if (st.queue.length && (st.sheet === null || st.sheet === "log")) nextSheet();
@@ -558,6 +562,43 @@ function paperAskSheet() {
     <div class="row2"><button class="primary" data-act="paper" data-arg="yes">Yes, I write on paper</button><button class="ghost" data-act="paper" data-arg="no">No, I'll write here</button></div>
     <p class="quiet">You can change this any time with the iron key.</p>`);
 }
+// ---------- the Feasting Halls: who was at the table, and where you ate ----------
+const live = () => st.s.logs.filter((l) => !l.deleted);
+function knownGuests(): string[] { const seen: string[] = []; for (const l of live().slice().reverse()) for (const w of l.who ?? []) if (!seen.includes(w)) seen.push(w); return seen; }
+function knownPlaces(): { name: string; n: number }[] {
+  const m = new Map<string, { name: string; n: number; last: number }>();
+  for (const l of live()) if (l.place) { const k = l.place.toLowerCase(), v = m.get(k); m.set(k, { name: v?.name ?? l.place, n: (v?.n ?? 0) + 1, last: l.ts }); }
+  return [...m.values()].sort((a, b) => b.last - a.last);
+}
+function hallCounts() {
+  const q = new URLSearchParams(location.search), now = new Date(), L = live();
+  const cups: string[] = []; for (const l of L) for (const w of l.who ?? []) if (!cups.includes(w)) cups.push(w);
+  const signs = knownPlaces().sort((a, b) => L.findIndex((l) => l.place?.toLowerCase() === a.name.toLowerCase()) - L.findIndex((l) => l.place?.toLowerCase() === b.name.toLowerCase())).map((p) => ({ name: p.name, n: p.n }));
+  const since = Date.now() - 14 * 864e5;
+  const guests = L.filter((l) => l.ts > since && (l.action === "friends" || (l.withSomeone && ACTION_BY_ID[l.action]?.ember === "F"))).reduce((n, l) => n + Math.max(1, l.who?.length ?? 1), 0);
+  return {
+    cups, signs, guests, unnamedEats: L.filter((l) => l.action === "eat-out" && !l.place).length,
+    games: L.filter((l) => l.action === "games").length, serve: L.filter((l) => l.action === "volunteer").length,
+    hour: q.has("hour") ? +q.get("hour")! : now.getHours() + now.getMinutes() / 60, dow: q.has("dow") ? +q.get("dow")! : now.getDay(),
+  };
+}
+function whoSheet() {
+  const known = knownGuests().slice(0, 12), sel = st.whoDraft;
+  return sheetWrap("Who was at the table?", `<p class="blurb">A mether cup is hung in the Feasting Halls for each friend. Initials or a nickname is plenty; it stays on your device.</p>
+    ${known.length ? `<div class="chips wrap">${known.map((w) => `<button class="chip ${sel.includes(w) ? "on" : ""}" aria-pressed="${sel.includes(w)}" data-act="who-toggle" data-arg="${esc(w)}">${esc(w)}</button>`).join("")}</div>` : ""}
+    <label class="field"><span class="label">${known.length ? "Someone new" : "Their initials or nickname"}</span><input data-input="who" maxlength="12" placeholder="e.g. JM, or Dee" autocomplete="off"/></label>
+    <button class="primary wide" data-act="who-done">Hang their cups</button>
+    <button class="ghost wide" data-act="who-skip">Leave it unnamed</button>`);
+}
+function whereSheet() {
+  const known = knownPlaces().slice(0, 10);
+  return sheetWrap("Where did you eat?", `<p class="blurb">Each new place hangs an inn sign from the hall's beam. Going back brightens its sign.</p>
+    ${known.length ? `<div class="chips wrap">${known.map((p) => `<button class="chip" data-act="where-pick" data-arg="${esc(p.name)}">${esc(p.name)}</button>`).join("")}</div>` : ""}
+    <label class="field"><span class="label">${known.length ? "Somewhere new" : "The place"}</span><input data-input="where" maxlength="28" placeholder="The name over the door" autocomplete="off"/></label>
+    <button class="primary wide" data-act="where-done">Hang the sign</button>
+    <button class="ghost wide" data-act="where-pick" data-arg="">Leave it unnamed</button>`);
+}
+
 // ---------- familiars ----------
 const KINDS: { id: "cat" | "hound" | "hare" | "hen"; name: string; lore: string }[] = [
   { id: "cat", name: "Cat", lore: "a rush basket by the hearth, like the Cat Sí's" },
@@ -809,6 +850,8 @@ function sheet() {
   if (sh === "findkind") return sheetWrap("What did you find?", `<p class="blurb">It goes in a jar on the Glasshouse shelves.</p>
     <div class="chips wrap">${["bird", "plant", "flower", "creature", "stone"].map((k) => `<button class="chip" data-act="find-kind" data-arg="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
     <button class="ghost wide" data-act="find-kind" data-arg="">Just a find</button>`);
+  if (sh === "who") return whoSheet();
+  if (sh === "where") return whereSheet();
   if (sh === "glean") return gleanSheet();
   if ("found" in sh) return foundSheet(sh.found);
   if ("level" in sh) return levelSheet(sh.level);
@@ -900,7 +943,7 @@ function render() {
   if (document.getElementById("table")) attachTable();
   const icv = document.getElementById("interior") as HTMLCanvasElement | null;
   if (icv && st.inside) attachInterior(icv, st.inside, st.d.rooms[st.inside] ?? {}, st.station, lookToOpts(st.s.profile!.look, glowSize()), (k) => { st.station = k; render(); }, (st.s.done["visits-" + st.inside] ?? 0) < 4, { finished: st.s.logs.filter((l) => !l.deleted && l.action === "finish-book").length, shipped: st.s.logs.filter((l) => !l.deleted && l.action === "ship").length, poems: st.s.logs.filter((l) => !l.deleted && l.action === "poem").length,
-    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain") });
+    finds: st.s.logs.filter((l) => !l.deleted && l.action === "nature").map((l) => l.kind ?? "nest"), season: (new URLSearchParams(location.search).get("season") as Season) || seasonOf(new Date()), samhain: isSamhain() || new URLSearchParams(location.search).has("samhain"), hall: hallCounts() });
   document.querySelectorAll<HTMLImageElement>("img.pressed[data-page]").forEach(async (img) => { const u = await getPage(img.dataset.page!); if (u) img.src = u; else img.remove(); });
   const scene = document.getElementById("scene"), on = scene?.querySelector(".prop.on") as SVGGElement | null;
   if (scene && on) {
@@ -937,6 +980,18 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
     case "station": st.station = Number(arg); break;
     case "log": if (st.sheet === "tally") st.motion.notch = performance.now(); await logAction(arg); return;
     case "noop": return;
+    case "who-toggle": { const v = arg; st.whoDraft = st.whoDraft.includes(v) ? st.whoDraft.filter((x) => x !== v) : [...st.whoDraft, v]; break; }
+    case "who-done": case "who-skip": {
+      const typed = act === "who-done" ? ((document.querySelector("[data-input=who]") as HTMLInputElement)?.value ?? "").split(/[,&]| and /).map((x) => x.trim()).filter(Boolean) : [];
+      const names = act === "who-done" ? [...new Set([...st.whoDraft, ...typed])] : [];
+      const l = st.s.logs.find((x) => x.id === st.whoLog); if (l && names.length) { l.who = names; await commit(); }
+      st.whoDraft = []; st.sheet = null; nextSheet(); render(); return;
+    }
+    case "where-pick": case "where-done": {
+      const name = (act === "where-pick" ? arg : ((document.querySelector("[data-input=where]") as HTMLInputElement)?.value ?? "")).trim();
+      const l = st.s.logs.find((x) => x.id === st.whereLog); if (l && name) { l.place = name; await commit(); }
+      st.sheet = null; nextSheet(); render(); return;
+    }
     case "find-kind": { const l = st.s.logs.find((x) => x.id === st.findLog); if (l && arg) { l.kind = arg; await commit(); } st.sheet = null; nextSheet(); render(); return; }
     case "paper": st.s.settings = { ...st.s.settings, paper: arg === "yes", updated: Date.now() }; await commit(); st.sheet = "journal"; break;
     case "set-paper": st.s.settings = { ...st.s.settings, paper: !st.s.settings.paper, updated: Date.now() }; await commit(); break;
