@@ -2,6 +2,8 @@ import { bonfire, buildingArt, DEFS, guiser, lookToOpts } from "./art";
 import { attachWorld, standAtDoor, worldSVG } from "./iso";
 import { attachBothy, placeAt, STATIONS } from "./bothy";
 import { drawLive, drawTable, SPOTS, type Motion, type TableData } from "./table";
+import { simulate, MONSTERS, MONSTER_BY_ID, CORE, type Sim, type MonsterId } from "./monsters";
+import { drawMonster } from "./monsterArt";
 import { attachInterior, hasScene, sceneRooms, seasonOf, fairOn, type Season, type Market, type Well, type Raven } from "./interiors";
 import { inkify, interiorSVG, roomsOf } from "./world";
 import {
@@ -25,6 +27,7 @@ type Sheet =
 const st = {
   s: null as unknown as Save,
   d: null as unknown as Derived,
+  sim: null as unknown as Sim,
   view: "hollow" as View,
   sheet: null as Sheet,
   queue: [] as Sheet[], // celebrations waiting their turn
@@ -67,6 +70,7 @@ async function commit() {
   const before = st.d;
   fadeRags(st.s, Date.now());
   st.d = derive(st.s);
+  st.sim = simulate(st.s, relicMap());
   if (before) {
     for (const up of st.d.levelUps.slice(before.levelUps.length)) {
       st.queue.push({ level: up.level });
@@ -116,6 +120,8 @@ async function logAction(actionId: string, extra: Partial<Log> = {}) {
   else if (aw.week) toast(`${a.name}: a whole week kept. The notches bundle in · ${parts}`);
   else if (aw.rhythm) toast(`${a.name}: notched, a rhythm · ${parts}`);
   else toast(`${a.name}: ground in · ${parts}`);
+  const struck = st.sim.hits[l.id] ?? [];
+  if (struck.length) { const gone = struck.filter((h) => h.left), hit = struck.filter((h) => !h.left); setTimeout(() => toast(gone.length ? `${gone.map((h) => MONSTER_BY_ID[h.id].name).join(" and ")} ${gone.length > 1 ? "have" : "has"} lifted. You keep: ${gone.map((h) => MONSTER_BY_ID[h.id].drop).join(", ")}.` : `A hit on ${hit.map((h) => MONSTER_BY_ID[h.id].name).join(" and ")}. ${hit.length > 1 ? "They're" : "It's"} paler now.`), 2600); }
   if (a.id === "nature") { st.findLog = l.id; st.queue.unshift("findkind"); if (st.sheet === "log") st.sheet = null; }
   if (a.id === "friends") { st.whoLog = l.id; st.whoDraft = []; st.queue.unshift("who"); if (st.sheet === "log") st.sheet = null; }
   if (a.id === "let-go" && !extra.how) { st.letLog = l.id; st.letHow = ""; st.queue.unshift("letgo"); if (st.sheet === "log") st.sheet = null; }
@@ -163,6 +169,7 @@ function mapView() {
     rooms: (id: BuildingId) => st.d.rooms[id] ?? {},
     ember: st.d.ember, lvl: st.d.level, look, firstTime: !st.s.done.walked,
     post: ravenOpen() ? postCount() : 0,
+    monsters: st.sim.out.map((o) => ({ id: o.id, at: (isOpen(st.d, MONSTER_BY_ID[o.id].lurk) ? MONSTER_BY_ID[o.id].lurk : "bothy") as BuildingId, fade: 0.35 + 0.65 * (o.left / o.strength) })),
     wispNext: ownedRelics().some((r) => r.live?.wisp) ? (st.d.openings.find((o) => !isOpen(st.d, o.building))?.building as BuildingId ?? null) : null,
   };
   return `<section class="world-wrap" aria-label="Your Hollow">${worldSVG(ws)}
@@ -377,7 +384,8 @@ function tallySheet() {
   const rhythms = st.d.rhythms.map((id) => ACTION_BY_ID[id]).filter(Boolean);
   const rhythmList = rhythms.length ? `<p class="label">Your rhythms</p><p class="quiet">Things you do most days. They're part of your life, so they earn a little each day, and a full log's worth for each whole week kept.</p>
     <ul class="habits">${rhythms.map((a) => `<li class="habit"><button class="tick ${notchedToday.has(a.id) ? "done" : ""}" data-act="${notchedToday.has(a.id) ? "noop" : "log"}" data-arg="${a.id}" aria-pressed="${notchedToday.has(a.id)}" aria-label="${esc(a.name)}${notchedToday.has(a.id) ? ", notched today" : ""}">${notchedToday.has(a.id) ? "✓" : ""}</button><div class="hname"><b>${esc(a.name)}</b><span>${esc(a.room)}</span></div></li>`).join("")}</ul>` : "";
-  return sheetWrap("The tally stick", `${rhythmList}<p class="label">Habits</p><p class="blurb">Cut a notch for each day you keep a habit. A notch counts as a log, so it earns like anything else.</p>
+  const runs = st.sim.runs.length ? `<p class="label">Runs</p><p class="quiet">Whole weeks kept in a row. Monsters never take a run away.</p><ul class="blist runs">${st.sim.runs.map((r) => `<li><b>${esc(r.name)}</b><span>${r.weeks ? `${r.weeks} ${r.weeks === 1 ? "week" : "weeks"} running` : r.best ? "begun again" : "starting"}${r.best > r.weeks ? ` · best ${r.best}` : ""} · this week ${Math.min(r.thisWeek, r.need)} of ${r.need}${r.kept ? " ✓" : ""}</span></li>`).join("")}</ul>` : "";
+  return sheetWrap("The tally stick", `${rhythmList}${runs}<p class="label">Habits</p><p class="blurb">Cut a notch for each day you keep a habit. A notch counts as a log, so it earns like anything else.</p>
     ${habits.length ? `<ul class="habits">${habits.map(habitRow).join("")}</ul>` : `<p class="quiet">No habits chosen yet.</p>`}
     <button class="ghost wide" data-act="task" data-arg="habits">${habits.length ? "Change your habits" : "Choose up to three"}</button>`);
 }
@@ -403,6 +411,10 @@ function moonsSheet() {
 }
 // ---------- relics ----------
 const chosenRelic = (ember: Ember, tier: number) => (st.s.relics ?? []).find((r) => r.ember === ember && r.tier === tier);
+// Relics whose effects aren't built yet; every other relic works.
+const RELIC_WAITS = new Set(["potionbelt", "flask", "oar"]);
+function relicMap(): Map<string, number> { return new Map((st.s.relics ?? []).map((r) => [r.relic, r.swapped ?? r.chosen])); }
+const has = (id: string) => (st.s.relics ?? []).some((r) => r.relic === id);
 const ownedRelics = (): Relic[] => (st.s.relics ?? []).map((r) => RELIC_BY_ID[r.relic]).filter(Boolean);
 const pendingRelics = () => st.d.tierUps.filter((u) => !chosenRelic(u.ember, u.tier));
 const isSamhain = () => { const n = new Date(); return (n.getMonth() === 9 && n.getDate() === 31) || (n.getMonth() === 10 && n.getDate() === 1); };
@@ -414,7 +426,7 @@ function tierMemory(ember: Ember, tier: number): string {
 }
 function relicCard(r: Relic, act: string, label: string) {
   return `<section class="card relic ${r.side}"><p class="label">${r.side === "steady" ? "Steady" : "Deep"} · ${r.family}</p><h3>${esc(r.name)}</h3><p class="lore">${esc(r.lore)}</p><p>${esc(r.effect)}</p>
-    ${r.live ? "" : `<p class="quiet">This one wakes when the monsters and runs arrive in a later build.</p>`}
+    ${RELIC_WAITS.has(r.id) ? `<p class="quiet">This one wakes in a later build.</p>` : ""}
     <button class="primary wide" data-act="${act}" data-arg="${r.ember}:${r.tier}:${r.id}">${label}</button></section>`;
 }
 function relicChoiceSheet(ember: Ember, tier: number, swap = false) {
@@ -430,7 +442,7 @@ function relicsSheet() {
   const pend = pendingRelics();
   return sheetWrap("The relic jars", `${c ? `<section class="card"><p class="label">Your calling's charm</p><h3>${esc(c.charm)}</h3><p>${esc(c.charmText)}</p></section>` : ""}
     ${pend.map((u) => `<section class="card waiting"><h3>A jar waits: ${emberName(u.ember)}, tier ${u.tier}</h3><p class="quiet">Earned ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}
-    ${mine.map(({ ch, r }) => `<section class="card relic"><p class="label">${emberName(r.ember)} · tier ${r.tier} · ${r.family}</p><h3>${esc(r.name)}</h3><p>${esc(r.effect)}</p><p class="quiet">Earned ${tierMemory(r.ember, r.tier)}.${r.live ? "" : " It wakes when the monsters arrive."}</p>
+    ${mine.map(({ ch, r }) => `<section class="card relic"><p class="label">${emberName(r.ember)} · tier ${r.tier} · ${r.family}</p><h3>${esc(r.name)}</h3><p>${esc(r.effect)}</p><p class="quiet">Earned ${tierMemory(r.ember, r.tier)}.${RELIC_WAITS.has(r.id) ? " It wakes in a later build." : ""}</p>
       ${canSwap() ? `<button class="link" data-act="relic-swap" data-arg="${r.ember}:${r.tier}">Swap it at Samhain</button>` : ""}</section>`).join("")}
     ${!mine.length && !pend.length ? `<p class="blurb">A jar is filled when an ember earns its third point by logging, and again at its sixth and ninth. Each time you choose one of two relics: one for a steady life, one for a deep one.</p>` : ""}
     ${!canSwap() && mine.length ? `<p class="quiet">Once a year, at Samhain, you can swap a relic for its other.</p>` : ""}`);
@@ -454,7 +466,7 @@ function bookSheet() {
   const gl = (st.s.gleanings ?? []).slice().reverse().map((g) => `<section class="card glean"><h3>${new Date(g.written).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3>${g.lines.map((x) => `<p>“${esc(x)}”</p>`).join("")}</section>`).join("");
   const books = (st.s.books ?? []).map((b) => `<li><b>Book ${roman(b.n)}</b>, begun ${fmtDate(b.started)}${b.finished ? `, finished ${fmtDate(b.finished)}` : ", in use"}.</li>`).join("");
   const winds = (st.s.winds ?? []).filter((w) => w.answers?.length).slice().reverse().map((w) => `<section class="card wind"><h3>Tied ${fmtDate(w.tied)} ${new Date(w.tied).getFullYear()}</h3><p class="was">“${esc(w.words)}”</p>${(w.answers ?? []).map((a) => `<p class="label">${fmtDate(a.due)} ${new Date(a.due).getFullYear()}</p>${a.now ? `<p><i>Where I am:</i> ${esc(a.now)}</p>` : ""}${a.going ? `<p><i>Where I'm going:</i> ${esc(a.going)}</p>` : ""}${!a.now && !a.going ? `<p class="quiet">It blew past.</p>` : ""}`).join("")}</section>`).join("");
-  return sheetWrap("The Field Book", `${winds ? `<p class="label">Words on the wind</p><p class="quiet">What you tied to the thorn, and what you said when it came back.</p>${winds}` : ""}<p class="label">Places you've found</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}
+  return sheetWrap("The Field Book", `${bestiary()}${winds ? `<p class="label">Words on the wind</p><p class="quiet">What you tied to the thorn, and what you said when it came back.</p>${winds}` : ""}<p class="label">Places you've found</p>${found ? `<ul class="found">${found}</ul>` : `<p class="quiet">Only your Bothy so far. The next place is drawn in at level 2.</p>`}
     ${st.s.settings.paper ? `<p class="label">Gleanings from your notebooks</p>${gl || `<p class="quiet">At each new moon, the table asks you to copy a few lines from the month's pages in here.</p>`}<button class="ghost wide" data-act="glean">Glean now</button>${books ? `<p class="label">Your notebooks</p><ul class="found">${books}</ul>` : ""}` : ""}`);
 }
 function notesSheet() {
@@ -462,7 +474,7 @@ function notesSheet() {
   return sheetWrap(ravenOpen() ? "The post" : "A slip of reminders", ravenOpen() ? body.replace(/<section class="card/g, '<section class="card letter') : body);
 }
 function notesBody() {
-  return (`${nagHoles().map(nagCard).join("")}${reckoningDue() ? reckoningCard() : ""}${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${dueWinds().map(({ w, due }) => windCard(w, due)).join("")}${readyWants().map((w) => `<section class="card"><h3>The peddler is here</h3><p>"${esc(w.name)}" has hung on the waiting hook a whole moon. Do you still want it?</p>${wantButtons(w)}</section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">${ravenOpen() ? "No post. The ravens are home." : "Nothing to remember. The slip is gone from the wall."}</p>`}`);
+  return (`${monsterLetters().map((m) => `<section class="card"><h3>${esc(m.title)}</h3><p>${m.body}</p><button class="ghost" data-act="note" data-arg="${esc(m.key)}">${m.ok ?? "Noted"}</button></section>`).join("")}${nagHoles().map(nagCard).join("")}${reckoningDue() ? reckoningCard() : ""}${pendingRelics().map((u) => `<section class="card"><h3>A relic waits</h3><p>${emberName(u.ember)} reached tier ${u.tier} on ${tierMemory(u.ember, u.tier)}.</p><button class="primary" data-act="relic-open" data-arg="${u.ember}:${u.tier}">Choose its relic</button></section>`).join("")}${dueWinds().map(({ w, due }) => windCard(w, due)).join("")}${readyWants().map((w) => `<section class="card"><h3>The peddler is here</h3><p>"${esc(w.name)}" has hung on the waiting hook a whole moon. Do you still want it?</p>${wantButtons(w)}</section>`).join("")}${gleaningDue() ? `<section class="card"><h3>The gleaning</h3><p>The moon is new. Copy two or three lines from this month's pages into the Field Book.</p><button class="primary" data-act="glean">Glean the month</button></section>` : ""}${tasks()}${st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? `<section class="card"><h3>Your first week</h3><p>Your seven nights of questions are done.</p><button class="primary" data-act="sheet" data-arg="firstweek">Read it back</button></section>` : ""}${hasNotes() ? "" : `<p class="quiet">${ravenOpen() ? "No post. The ravens are home." : "Nothing to remember. The slip is gone from the wall."}</p>`}`);
 }
 
 // ---------- sheets ----------
@@ -689,7 +701,7 @@ function wellCounts(): Well {
 const ravenOpen = () => isOpen(st.d, "raven-post");
 // letters: everything on the slip except the house chores
 function postCount() {
-  return pendingRelics().length + dueWinds().length + readyWants().length + (gleaningDue() ? 1 : 0) + nagHoles().length + (reckoningDue() ? 1 : 0)
+  return monsterLetters().length + pendingRelics().length + dueWinds().length + readyWants().length + (gleaningDue() ? 1 : 0) + nagHoles().length + (reckoningDue() ? 1 : 0)
     + (st.s.quiz?.mirror !== undefined && !st.s.quiz?.settled ? 1 : 0);
 }
 const holesOpen = () => (st.s.holes ?? []).filter((h) => !h.done);
@@ -723,6 +735,56 @@ function ravenCounts(): Raven {
     seals: L.filter((l) => l.action === "admin").length, pages: L.filter((l) => l.action === "budget").length,
     reckoning: g === "gale" || g === "first" ? g : new Date().getDate() === 1 ? (isGale() ? "gale" : "first") : null,
   };
+}
+
+// ---------- monsters: the letters they send, the Field Book's pages, the sight relics ----------
+const pausedNow = () => (st.s.pauses ?? []).find((p) => !p.to);
+const lurkName = (id: MonsterId) => { const b = MONSTER_BY_ID[id].lurk, n = isOpen(st.d, b) ? bName(b) : bName("bothy"); return n.replace(/^The /, "the ").replace(/^Your /, "your "); };
+function monsterLetters(): { key: string; title: string; body: string; ok?: string }[] {
+  const noted = new Set(st.s.noted ?? []), t = today(), out: { key: string; title: string; body: string; ok?: string }[] = [];
+  if (!st.sim || st.s.settings.gentle) return out;
+  // only the latest arrival of each monster still out, and departures from the last week; newest first
+  const outNow = new Map(st.sim.out.map((o) => [o.id, o.since]));
+  const shown = st.sim.events.filter((e) => e.kind === "came" ? outNow.get(e.id) === e.day : e.day >= addDays(t, -7)).reverse();
+  for (const e of shown) {
+    if (noted.has(e.key)) continue;
+    const m = MONSTER_BY_ID[e.id];
+    if (e.kind === "came") out.push({ key: e.key, title: `${m.name}, at ${lurkName(e.id)}`, body: `${esc(m.came)} ${e.why === "named" ? "You named it in the journal." : ""} It's beaten by ${esc(m.beatsText.toLowerCase())}. Every one is a hit, and it fades a little each time.` });
+    else out.push({ key: e.key, title: `${m.name} has lifted`, body: `It's gone pale and left ${lurkName(e.id)}. Its page in the Field Book fills in, and you keep a title: <b>${esc(m.drop)}</b>.`, ok: "Put it away" });
+  }
+  // the sight relics
+  const sight = (key: string, title: string, body: string) => { if (!noted.has(key)) out.push({ key, title, body }); };
+  if (has("hagstone")) for (const n of st.sim.near.filter((x) => x.days === 1)) { const m = MONSTER_BY_ID[n.id]; sight(`hag:${n.id}:${t}`, "Through the hag stone", `${esc(m.name)} is a day off. ${esc(m.beatsText)} today would turn it.`); }
+  if (has("anvil")) { const p = st.sim.near.find((x) => x.id === "puca" && x.days <= 2); if (p) sight(`anvil:${t}`, "The anvil charm", `Your project work has gone quiet. The Púca is ${p.days} ${p.days === 1 ? "day" : "days"} off.`); }
+  const lapse = (pred: (a: string) => boolean, key: string, title: string) => { for (const a of st.d.rhythms.filter(pred)) { if ((st.d.byDay[t] ?? []).some((l) => l.action === a)) continue; let n = 0; for (let k = 1; k <= 7; k++) if ((st.d.byDay[addDays(t, -k)] ?? []).some((l) => l.action === a)) n++; if (n <= 5) sight(`${key}:${a}:${t}`, title, `${esc(ACTION_BY_ID[a].name)} is a rhythm, and it slips tomorrow unless it's notched today.`); } };
+  if (has("raven")) lapse(() => true, "raven", "The raven, at the window");
+  else if (has("silverbranch")) lapse((a) => ACTION_BY_ID[a]?.ember === "F", "branch", "The silver branch");
+  if (has("ribbon")) { const last = new Map<string, number>(); for (const l of live()) for (const w of l.who ?? []) last.set(w, l.ts); for (const [w, ts] of last) if (Date.now() - ts > 30 * DAY_MS) sight(`ribbon:${w}:${t.slice(0, 7)}`, "A bard's ribbon", `You haven't sat with ${esc(w)} in over a month.`); }
+  if (has("hazelnut")) { const quiet = ["read", "lesson"].filter((a) => live().some((l) => l.action === a)).map((a) => ({ a, last: Math.max(...live().filter((l) => l.action === a).map((l) => l.ts)) })).filter((x) => Date.now() - x.last > 10 * DAY_MS); for (const q of quiet) sight(`hazel:${q.a}:${weekKey()}`, "The hazelnut", `A wisp hangs over the Ogham Tower: ${esc(ACTION_BY_ID[q.a].name.toLowerCase())} has gone quiet.`); }
+  if (has("moonstone")) { const j = st.s.journal[addDays(t, -365)]; if (j?.text) sight(`moon:${t}`, "The moonstone", `A year ago tonight you wrote: “${esc(j.text)}”`); }
+  if (has("lodestone") && new Date().getDay() === 1) { const quiet = BUILDINGS.filter((b) => b.id !== "bothy" && isOpen(st.d, b.id) && !live().some((l) => ACTION_BY_ID[l.action]?.building === b.id && Date.now() - l.ts < 30 * DAY_MS)); if (quiet.length) sight(`lode:${t}`, "The lodestone", `Not visited this month: ${quiet.map((b) => esc(b.name)).join(", ")}.`); }
+  return out;
+}
+const weekKey = () => weekStart(today());
+function seerLine(): string {
+  if (!has("seerglass")) return "";
+  const since = Date.now() - 56 * DAY_MS, n = [0, 0, 0, 0, 0, 0, 0]; for (const l of live()) if (l.ts > since) n[new Date(l.ts).getDay()]++;
+  const top = n.indexOf(Math.max(...n)), low = n.indexOf(Math.min(...n)), D = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+  return Math.max(...n) ? `<section class="card"><h3>The seer's glass</h3><p>Over the last eight weeks you've done most on ${D[top]}, and least on ${D[low]}.</p></section>` : "";
+}
+const monsterImg = new Map<string, string>();
+function monsterPic(id: MonsterId, sil: boolean): string {
+  const key = id + (sil ? ":s" : ""); if (monsterImg.has(key)) return monsterImg.get(key)!;
+  const cv = document.createElement("canvas"); cv.width = 200; cv.height = 200; const c = cv.getContext("2d")!;
+  drawMonster(c, id, 100, 168, 2, 0.6, 1, sil); const url = cv.toDataURL(); monsterImg.set(key, url); return url;
+}
+function bestiary(): string {
+  const rec = st.sim.record, open = (id: MonsterId) => CORE.includes(id) || !!rec[id];
+  const shown = MONSTERS.filter((m) => open(m.id));
+  const titles = st.sim.titles;
+  return `<p class="label">The bestiary</p><p class="quiet">${st.s.settings.gentle ? "Gentle mode is on: no monster comes." : "A page fills in the first time a monster comes. Its name is here from the start so you can name it in the journal."}</p>
+    <ul class="bestiary">${shown.map((m) => { const r = rec[m.id]; return `<li class="${r ? "met" : "dark"}"><img src="${monsterPic(m.id, !r)}" alt="${r ? esc(m.name) : `${esc(m.name)}, not yet met`}" width="96" height="96"/><div><b>${esc(m.name)}</b> <i>(${esc(m.say)})</i><span class="nick">${esc(m.nick)} · ${esc(m.stands.toLowerCase())}</span>${r ? `<p>${esc(m.lore)}</p><p><i>Beaten by:</i> ${esc(m.beatsText.toLowerCase())}. <i>Lurks near</i> ${esc(lurkName(m.id))}.</p><p class="quiet">Met ${r.met} ${r.met === 1 ? "time" : "times"} · beaten ${r.beaten} · last seen ${fmtDate(Date.parse(r.last + "T12:00:00"))}</p>` : ""}</div></li>`; }).join("")}</ul>
+    ${titles.length ? `<p class="label">Titles kept</p><p>${titles.map(esc).join(" · ")}</p>` : ""}${seerLine()}`;
 }
 
 // ---------- the Dinnseanchas: the lore of places, kept at the Scriptorium ----------
@@ -933,7 +995,9 @@ function settingsSheet() {
     <p class="quiet">Opening a backup blends it into this Hollow, so nothing here is lost. ${st.s.done.backup ? `Last backup ${fmtDate(st.s.done.backup)}.` : "No backup yet."}</p>
     <p class="label">Your other devices</p>
     <p class="quiet">Live sync between your phone and computer comes in the next build: pair once with a QR code, then they catch up whenever both are open. Until then, a backup file moves your Hollow across.</p>
-    <p class="label">Monsters</p><p class="quiet">Monsters arrive in a later build. They'll sleep while you're away, and gentle mode can turn them off entirely.</p>`);
+    <p class="label">Monsters</p><p class="quiet">Monsters are weather passing through the Hollow: they come when something's been quiet a while, or when you name what got in the way. They never take anything from you, and they sleep while you're away.</p>
+    <div class="chips wrap"><button class="chip ${st.s.settings.gentle ? "on" : ""}" aria-pressed="${!!st.s.settings.gentle}" data-act="gentle">Gentle mode${st.s.settings.gentle ? ": on" : ""}</button><button class="chip ${pausedNow() ? "on" : ""}" aria-pressed="${pausedNow()}" data-act="pause">${pausedNow() ? `Paused since ${fmtDate(pausedNow()!.from)}` : "Pause the Hollow"}</button></div>
+    <p class="quiet">Gentle mode turns monsters off; logs still earn everything. Pause is for illness, travel, grief or a new baby: every timer freezes and nothing comes until you unpause.</p>`);
 }
 
 function lookSheet() {
@@ -1178,6 +1242,9 @@ async function onAct(act: string, arg: string, el: HTMLElement) {
       st.sheet = null; nextSheet(); render(); return;
     }
     case "market-day": st.s.settings = { ...st.s.settings, marketDay: Number(arg), updated: Date.now() }; await commit(); break;
+    case "note": (st.s.noted ??= []).push(arg); await commit(); if (st.sheet === "notes" && !hasNotes()) st.sheet = null; break;
+    case "gentle": st.s.settings = { ...st.s.settings, gentle: !st.s.settings.gentle, updated: Date.now() }; await commit(); break;
+    case "pause": { const p = pausedNow(); if (p) p.to = Date.now(); else (st.s.pauses ??= []).push({ from: Date.now() }); await commit(); toast(p ? "The Hollow wakes. Timers run again." : "The Hollow is paused. Nothing comes while you're away."); break; }
     case "hole-put": {
       const name = ((document.querySelector("[data-input=hole]") as HTMLInputElement)?.value ?? "").trim();
       if (!name) { toast("Name the thing first."); return; }
@@ -1466,6 +1533,7 @@ export async function start() {
   st.s = await load();
   if (fadeRags(st.s, Date.now())) await save(st.s);
   st.d = derive(st.s);
+  st.sim = simulate(st.s, relicMap());
   render();
   document.addEventListener("click", (e) => {
     const el = (e.target as HTMLElement).closest("[data-act]") as HTMLElement | null;

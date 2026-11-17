@@ -5,6 +5,8 @@ import type { GuiserOpts } from "./art";
 import { drawStaff } from "./staffs";
 import { drawBuilding, type Rooms } from "./buildings";
 import { h2, kit } from "./ink";
+import { drawMonster } from "./monsterArt";
+import type { MonsterId } from "./monsters";
 
 export interface WorldState {
   open: (id: BuildingId) => boolean;
@@ -16,6 +18,7 @@ export interface WorldState {
   firstTime: boolean;
   wispNext?: BuildingId | null; // the Wisp lantern shows the next place through the fog
   post?: number; // letters waiting at the Raven Post: ravens circle it
+  monsters?: { id: MonsterId; at: BuildingId; fade: number }[]; // monsters out, by the place they lurk near
 }
 
 // ---------- the board ----------
@@ -318,6 +321,11 @@ function drawBld(c: C, o: Bld, t: number, ws: WorldState) {
   const { s, top } = buildingSprite(id, previewAll ? allRooms(id) : ws.rooms(id));
   ellipse(c, x + 6, y + 4, TW * 0.9, TH * 0.9, "rgba(120,114,106,.16)");
   c.drawImage(s.cv, x - s.ax, y - s.ay, s.w, s.h);
+  (ws.monsters ?? []).filter((m) => m.at === id).forEach((m, k) => {
+    // the place goes a little foggy while a monster lurks, and the monster stands by it, paler as it's hit
+    for (let q = 0; q < 4; q++) { c.globalAlpha = 0.28; ellipse(c, x - 40 + q * 26 + Math.sin(t * 0.4 + q) * 6, y + 8 - (q % 2) * 10, 30, 9, "#f3f1ec"); c.globalAlpha = 1; }
+    drawMonster(c, m.id, x + 60 + k * 34, y + 20, 0.85, t + k, m.fade);
+  });
   if (id === "raven-post" && (ws.post ?? 0) > 0) for (let k = 0; k < Math.min(3, ws.post!); k++) {
     const a = t * 0.8 + k * 2.1, rx = x + Math.cos(a) * 46, ry = y - top - 30 + Math.sin(a) * 12, f = Math.sin(t * 9 + k) * 5;
     c.lineWidth = 2.6; c.strokeStyle = INK; c.lineCap = "round"; c.beginPath(); c.moveTo(rx - 11, ry - f); c.quadraticCurveTo(rx - 5, ry - 3, rx, ry); c.quadraticCurveTo(rx + 5, ry - 3, rx + 11, ry - f); c.stroke();

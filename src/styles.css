@@ -311,3 +311,12 @@ img.pressed { display: block; max-width: 100%; border: 2px solid var(--ink); mar
 /* the post: letters under a red wax seal */
 .card.letter { position: relative; }
 .card.letter::after { content: ""; position: absolute; top: -8px; right: 18px; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #e0675a, #d2483a 55%, #a83a2f); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+/* the bestiary */
+.bestiary { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.bestiary li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.bestiary li img { width: 96px; height: 96px; background: var(--paper, #f3f1ec); border: 1.5px solid var(--ink, #1e1c1a); border-radius: 4px; }
+.bestiary li.dark img { opacity: .55; }
+.bestiary li p { margin: 4px 0 0; }
+.bestiary .nick { display: block; color: var(--soft); font-style: italic; }
+.runs li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 6px 0; border-bottom: 1px dashed var(--rule); list-style: none; }
+.runs li span { color: var(--soft); }

@@ -82,7 +82,9 @@ export interface Save {
   habits: Habit[];
   logs: Log[];
   journal: Record<string, JournalEntry>;
-  settings: { cutoffHour: number; nudges: boolean; paper?: boolean; press?: boolean; marketDay?: number; updated: number };
+  settings: { cutoffHour: number; nudges: boolean; paper?: boolean; press?: boolean; marketDay?: number; gentle?: boolean; updated: number };
+  pauses?: { from: number; to?: number }[]; // pause mode: every monster timer frozen
+  noted?: string[]; // letters read and put away
   done: Record<string, number>; // first-week tasks and other one-off moments
   quiz?: Quiz;
   cairn?: { text: string; written: number; opens: number }[];
@@ -439,6 +441,9 @@ export function merge(a: Save, b: Save): Save {
   const holes = new Map<string, Hole>();
   for (const h of [...(a.holes ?? []), ...(b.holes ?? [])]) { const p = holes.get(h.id); holes.set(h.id, p ? { ...p, ...h, done: Math.max(p.done ?? 0, h.done ?? 0) || undefined, dealt: p.dealt || h.dealt, nag: Math.max(p.nag ?? 0, h.nag ?? 0) || undefined } : h); }
   if (holes.size) out.holes = [...holes.values()].sort((x, y) => x.put - y.put);
+  const pz = new Map<number, { from: number; to?: number }>(); for (const p of [...(a.pauses ?? []), ...(b.pauses ?? [])]) { const q = pz.get(p.from); pz.set(p.from, q && (q.to ?? Infinity) <= (p.to ?? Infinity) ? q : p); }
+  if (pz.size) out.pauses = [...pz.values()].sort((x, y) => x.from - y.from);
+  const noted = [...new Set([...(a.noted ?? []), ...(b.noted ?? [])])]; if (noted.length) out.noted = noted;
   const reck = [...new Set([...(a.reckoned ?? []), ...(b.reckoned ?? [])])]; if (reck.length) out.reckoned = reck.sort();
   const winds = new Map<string, Wind>();
   for (const w of [...(a.winds ?? []), ...(b.winds ?? [])]) { const p = winds.get(w.id); const ans = [...(p?.answers ?? []), ...(w.answers ?? [])].filter((x, i, arr) => arr.findIndex((y) => y.due === x.due) === i); winds.set(w.id, { ...(p ?? w), answers: ans.length ? ans : undefined }); }
