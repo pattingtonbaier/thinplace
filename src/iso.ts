@@ -15,6 +15,7 @@ export interface WorldState {
   look: GuiserOpts;
   firstTime: boolean;
   wispNext?: BuildingId | null; // the Wisp lantern shows the next place through the fog
+  post?: number; // letters waiting at the Raven Post: ravens circle it
 }
 
 // ---------- the board ----------
@@ -317,6 +318,10 @@ function drawBld(c: C, o: Bld, t: number, ws: WorldState) {
   const { s, top } = buildingSprite(id, previewAll ? allRooms(id) : ws.rooms(id));
   ellipse(c, x + 6, y + 4, TW * 0.9, TH * 0.9, "rgba(120,114,106,.16)");
   c.drawImage(s.cv, x - s.ax, y - s.ay, s.w, s.h);
+  if (id === "raven-post" && (ws.post ?? 0) > 0) for (let k = 0; k < Math.min(3, ws.post!); k++) {
+    const a = t * 0.8 + k * 2.1, rx = x + Math.cos(a) * 46, ry = y - top - 30 + Math.sin(a) * 12, f = Math.sin(t * 9 + k) * 5;
+    c.lineWidth = 2.6; c.strokeStyle = INK; c.lineCap = "round"; c.beginPath(); c.moveTo(rx - 11, ry - f); c.quadraticCurveTo(rx - 5, ry - 3, rx, ry); c.quadraticCurveTo(rx + 5, ry - 3, rx + 11, ry - f); c.stroke();
+  }
   const w = tag(c, x, y - top - 8, name, false);
   o.bbox = [x - Math.max(w / 2, 70), y - top - 24, x + Math.max(w / 2, 70), y + TH + 6];
 }

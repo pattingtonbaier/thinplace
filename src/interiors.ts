@@ -183,7 +183,9 @@ export type Well = {
   herbs: number[]; weed: number[]; // still-room bundles and seaweed fronds, as ages from 0 fresh to 1 gone
   steam: boolean; trout: boolean; imbolc: boolean;
 };
-type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall; market?: Market; well?: Well };
+export type Raven = { post: number; holes: { name: string; age: number }[]; seals: number; pages: number; reckoning: "gale" | "first" | null };
+type Counts = { finished: number; shipped: number; poems: number; finds: string[]; season: Season; samhain: boolean; hall?: Hall; market?: Market; well?: Well; raven?: Raven };
+const NO_RAVEN: Raven = { post: 0, holes: [], seals: 0, pages: 0, reckoning: null };
 const NO_WELL: Well = { phase: 0.3, rags: [], step: 0, quartz: 0, shawl: null, herbs: [], weed: [], steam: false, trout: false, imbolc: false };
 const NO_MARKET: Market = { belt: "", wares: 0, wants: [], ins: 0, outs: 0, tokens: [], bike: 0, bikeRecent: false, car: 0, carRecent: false, mood: "quiet", fair: null, dow: 2, day: 6 };
 // The old fair days that open the square, whatever day of the week they fall on.
@@ -1484,6 +1486,133 @@ function wellFront() {
 }
 const inR = (x: number, y: number, r: number[]) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
 
+
+// ---------- the Raven Post: a rookery tower, opened front-on. The Roost, the Steward's room, the Treasury in the cellar. ----------
+// The Hollow's letters come in here. Ravens on the perches mean post is waiting; one is always home.
+const RP = { w: 760, h: 850, gy: 640, x0: 196, x1: 564, wall: 22, roost: 300, room: 462, cellar: 800 };
+const RAVEN_SPOTS: Spot[] = [
+  { room: "the Steward's desk", at: [0, 0], hot: [0, 0], name: "the Steward's desk" },
+  { room: "the Treasury", at: [0, 0], hot: [0, 0], name: "the Treasury" },
+];
+const rv = () => extra.raven ?? NO_RAVEN;
+function raven(x: number, y: number, t: number, k: number, flip = 1, s2 = 1) {
+  const bob = Math.sin(t * 1.3 + k * 2.3) * 0.8, look = Math.sin(t * 0.6 + k) > 0.7 ? -flip : flip;
+  c.save(); c.translate(x, y + bob); c.scale(s2 * look, s2);
+  poly([[-12, -2], [-6, -14], [4, -16], [10, -10], [8, -2], [2, 2], [-16, 4]], "#1e1c1a", 1);
+  ell(8, -16, 6, 5.4, "#1e1c1a"); poly([[13, -17], [21, -15], [13, -13]], "#3a3733", 0.8); ell(9.5, -17, 1, 1, "#e3dfd8");
+  line([[-2, 2], [-3, 8]], 1.2); line([[3, 1], [3, 8]], 1.2);
+  c.restore();
+}
+function ravenFlying(x: number, y: number, t: number, s2 = 1) {
+  const f = Math.sin(t * 9) * 7 * s2;
+  c.lineWidth = 3 * s2; c.strokeStyle = "#1e1c1a"; c.lineCap = "round";
+  c.beginPath(); c.moveTo(x - 14 * s2, y - f); c.quadraticCurveTo(x - 6 * s2, y - 4 * s2, x, y); c.quadraticCurveTo(x + 6 * s2, y - 4 * s2, x + 14 * s2, y - f); c.stroke();
+  ell(x, y + 1, 3.4 * s2, 2.4 * s2, "#1e1c1a");
+}
+function ravenStill(rooms: Rooms) {
+  const open = (r: string) => r in rooms, { gy, x0, x1, wall, roost, room, cellar } = RP, ix0 = x0 + wall, ix1 = x1 - wall;
+  c.fillStyle = "#d9d5cd"; c.fillRect(0, 0, RP.w, gy);
+  for (let k = 0; k < 900; k++) { c.fillStyle = "rgba(30,28,26,.05)"; c.fillRect(h2(k, 1) * RP.w, h2(k, 2) * gy, 1.4, 1.4); }
+  // a rookery of bare trees either side
+  for (const [tx, sc] of [[90, 1], [680, 0.9]] as Pt[]) { line([[tx, gy], [tx, gy - 260 * sc]], 5); for (let k = 0; k < 6; k++) { const y = gy - 120 * sc - k * 24 * sc, d = k % 2 ? 1 : -1; line([[tx, y], [tx + d * (50 - k * 5) * sc, y - 30 * sc]], 2); } ell(tx + 26 * sc, gy - 230 * sc, 12, 7, "#3a3733", 1); ell(tx - 24 * sc, gy - 196 * sc, 10, 6, "#3a3733", 1); }
+  // the ground, cut through to show the cellar
+  poly([[0, gy], [RP.w, gy], [RP.w, RP.h], [0, RP.h]], "#bdb7ac", 2.4); hatch([[0, gy + 6], [RP.w, gy + 6], [RP.w, RP.h], [0, RP.h]], 6, "#8d887f");
+  // the tower walls, coursed stone, cut in section
+  for (const [a, b] of [[x0, ix0], [ix1, x1]] as Pt[]) coursed(rect2(a, roost - 6, b, cellar), a, b, roost - 6, cellar);
+  // the conical roof over the roost
+  poly([[x0 - 18, roost - 4], [(x0 + x1) / 2, roost - 150], [x1 + 18, roost - 4]], "#6f6b65", 2.6);
+  clipTo([[x0 - 18, roost - 4], [(x0 + x1) / 2, roost - 150], [x1 + 18, roost - 4]], () => { for (let y = roost - 150; y < roost; y += 9) for (let x = x0 - 20 + ((y / 9) % 2) * 9; x < x1 + 20; x += 18) { c.beginPath(); c.arc(x, y + 9, 9, Math.PI, 0); c.lineWidth = 0.9; c.strokeStyle = "#3a3733"; c.stroke(); } });
+  poly([[x0 - 18, roost - 4], [(x0 + x1) / 2, roost - 150], [x1 + 18, roost - 4]], null, 2.6);
+  line([[(x0 + x1) / 2, roost - 150], [(x0 + x1) / 2, roost - 190]], 2); poly([[(x0 + x1) / 2, roost - 190], [(x0 + x1) / 2 + 26, roost - 182], [(x0 + x1) / 2, roost - 174]], "#3a3733", 1.4);
+  // the roost: a back wall with two open arches onto the sky, and perches
+  poly(rect2(ix0, roost, ix1, room), "#cfc9be", 0);
+  for (const ax of [ix0 + 40, ix1 - 120]) { c.beginPath(); c.moveTo(ax, room - 20); c.lineTo(ax, roost + 70); c.arc(ax + 40, roost + 70, 40, Math.PI, 0); c.lineTo(ax + 80, room - 20); c.closePath(); c.fillStyle = "#e9e6e0"; c.fill(); c.lineWidth = 2.2; c.strokeStyle = INK; c.stroke(); }
+  // floors
+  poly(rect2(ix0, room - 8, ix1, room + 4), "#8d7a62", 2); poly(rect2(ix0, gy - 6, ix1, gy + 6), "#8d7a62", 2);
+  // the Steward's room: lime-washed, with a window and the stair up
+  poly(rect2(ix0, room + 4, ix1, gy - 6), "#e6e1d7", 0);
+  poly(rect2(ix1 - 120, room + 34, ix1 - 70, room + 96), "#d9d5cd", 2); line([[ix1 - 95, room + 34], [ix1 - 95, room + 96]], 1.4); line([[ix1 - 120, room + 65], [ix1 - 70, room + 65]], 1.4); poly(rect2(ix1 - 126, room + 96, ix1 - 64, room + 102), "#a8a39b", 1.4);
+  for (let k = 0; k < 7; k++) { const y = gy - 12 - k * 24, x = ix1 - 20 - k * 4; line([[x, y], [x + 22, y]], 2.4, "#6f6252"); } line([[ix1 - 46, gy - 6], [ix1 - 20, room]], 2.4, "#6f6252"); line([[ix1 - 4, gy - 6], [ix1 + 0, room]], 2.4, "#6f6252");
+  // the Treasury: a barrel-vaulted cellar
+  poly(rect2(ix0, gy + 6, ix1, cellar), "#a9a397", 0);
+  c.beginPath(); c.moveTo(ix0, cellar); c.lineTo(ix0, gy + 64); c.quadraticCurveTo((ix0 + ix1) / 2, gy - 10, ix1, gy + 64); c.lineTo(ix1, cellar); c.closePath(); c.fillStyle = "#c4beb2"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+  clipTo([[ix0, gy + 6], [ix1, gy + 6], [ix1, cellar], [ix0, cellar]], () => { for (let k = 0; k < 9; k++) { const x = ix0 + 20 + k * 38; line([[x, gy + 18 + Math.abs(k - 4) * 9], [x, gy + 30 + Math.abs(k - 4) * 9]], 1, "#6f6b65"); } });
+  poly(rect2(ix0, cellar - 8, ix1, cellar), "#8d887f", 1.6);
+  if (!open("the Steward's desk")) chalkAt(330, gy - 16);
+  if (!open("the Treasury")) chalkAt(380, cellar - 20);
+}
+function ravenThings(rooms: Rooms, t: number): { depth: number; draw: () => void }[] {
+  const open = (r: string) => r in rooms, out: { depth: number; draw: () => void }[] = [], R = rv(), { gy, x0, x1, wall, roost, room, cellar } = RP, ix0 = x0 + wall, ix1 = x1 - wall;
+  // the roost: one raven always home, and one more for each letter waiting
+  out.push({ depth: 0, draw: () => {
+    line([[ix0 + 6, roost + 140], [ix1 - 6, roost + 140]], 4, "#6f6252"); line([[ix0 + 30, roost + 92], [ix0 + 150, roost + 92]], 3, "#6f6252"); line([[ix1 - 150, roost + 92], [ix1 - 30, roost + 92]], 3, "#6f6252");
+    const seats: [number, number, number][] = [[270, roost + 140, 1], [480, roost + 92, -1], [330, roost + 140, -1], [250, roost + 92, 1], [420, roost + 140, 1], [460, roost + 140, -1], [300, roost + 92, -1]];
+    seats.slice(0, Math.min(seats.length, 1 + R.post)).forEach(([x, y, f], k) => raven(x, y, t, k, f));
+    if (R.post > 0) { const u = (t * 0.12) % 1, fx = -40 + u * 340, fy = roost + 40 + Math.sin(u * Math.PI) * -60; if (u < 0.85) ravenFlying(fx, fy, t, 1); }
+    // straw and a few dropped feathers on the roost floor
+    for (let k = 0; k < 12; k++) line([[ix0 + 20 + h2(k, 3) * 300, room - 10], [ix0 + 28 + h2(k, 3) * 300, room - 13]], 1, "#a8977a");
+  } });
+  // the Steward's room: pigeonholes on the left, the desk with its sealing roll, and the post on the tray
+  if (open("the Steward's desk")) out.push({ depth: 1, draw: () => {
+    const px = ix0 + 14, py = room + 22, cw = 26, ch = 22, cols = 5, rows = 4;
+    poly(rect2(px - 6, py - 6, px + cols * cw + 6, py + rows * ch + 6), "#8d7a62", 2);
+    for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+      const i = r * cols + q, x = px + q * cw, y = py + r * ch; poly(rect2(x + 2, y + 2, x + cw - 2, y + ch - 2), "#3a3733", 0.8);
+      const h = R.holes[i]; if (!h) continue;
+      poly(rect2(x + 4, y + 8, x + cw - 4, y + ch - 3), h.age >= 7 ? "#d7d0c1" : "#efe8da", 0.8);
+      line([[x + 6, y + 12], [x + cw - 8, y + 12]], 0.6, "#6f6b65");
+      if (h.age >= 7) { line([[x + cw - 6, y + 2], [x + cw - 12, y + 12]], 1.6, "#1e1c1a"); line([[x + cw - 7, y + 4], [x + cw - 10, y + 5]], 0.8, "#6f6b65"); }
+    }
+    if (!R.holes.length) quietText("put off what you're putting off", px + cols * cw / 2, py + rows * ch + 24, 11);
+    // the desk
+    const d0 = 334, d1 = 470, top = gy - 64;
+    poly(rect2(d0, top, d1, top + 9), "#8d7a62", 2); for (const x of [d0 + 8, d1 - 8]) line([[x, top + 9], [x, gy - 6]], 3.4, "#6f6252");
+    poly(rect2(d0 + 10, top + 22, d1 - 10, top + 30), "#8d7a62", 1.4);
+    // the sealing roll: unrolled across the desk and down its front, a red seal for each bit of admin done
+    const rolled = Math.floor(R.seals / 24), shown = R.seals % 24 || (R.seals ? 24 : 0);
+    ell(d0 + 30, top - 6, 7 + Math.min(10, rolled * 1.5), 7 + Math.min(10, rolled * 1.5), "#efe8da", 1.4);
+    poly([[d0 + 30, top - 1], [d0 + 96, top - 1], [d0 + 96, top + 70], [d0 + 30, top + 70]], "#efe8da", 1.4);
+    for (let k = 0; k < shown; k++) { const sx = d0 + 40 + (k % 4) * 15, sy = top + 6 + Math.floor(k / 4) * 11; ell(sx, sy, 5, 4.4, "#d2483a", 0.8); ell(sx, sy, 2, 1.6, "#a83a2f"); }
+    // wax, a candle, the seal, and the post tray
+    poly(rect2(d1 - 30, top - 22, d1 - 24, top), "#ece8e0", 1); flameAt(c, d1 - 27, top - 23, 0.22, t);
+    line([[d1 - 52, top - 2], [d1 - 40, top - 10]], 3, "#d2483a"); line([[d1 - 64, top - 2], [d1 - 64, top - 14]], 2.4, "#6f6252"); ell(d1 - 64, top - 1, 4, 2, "#8d7a62", 1);
+    poly(rect2(d0 + 100, top - 6, d0 + 130, top), "#a8977a", 1.2);
+    for (let k = 0; k < Math.min(5, R.post); k++) { poly(rect2(d0 + 102, top - 10 - k * 4, d0 + 128, top - 6 - k * 4), "#f4f0e6", 0.8); ell(d0 + 115, top - 8 - k * 4, 2, 1.6, "#d2483a"); }
+    // a raven at the window when there's post
+    if (R.post > 0) raven(ix1 - 96, room + 94, t, 9, -1, 0.9);
+  } });
+  // the Treasury: the strongbox, and the ledger on its stand, a page turned at each check-in; full ledgers on the shelf
+  if (open("the Treasury")) out.push({ depth: 1, draw: () => {
+    const fl = cellar - 8, sb = ix0 + 30;
+    poly(rect2(sb, fl - 46, sb + 80, fl), "#6f6252", 2); for (const x of [sb + 12, sb + 68]) poly(rect2(x - 3, fl - 46, x + 3, fl), "#3a3733", 1); line([[sb, fl - 30], [sb + 80, fl - 30]], 2.4, "#3a3733");
+    c.beginPath(); c.moveTo(sb, fl - 46); c.quadraticCurveTo(sb + 40, fl - 66, sb + 80, fl - 46); c.fillStyle = "#6f6252"; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+    poly(rect2(sb + 34, fl - 38, sb + 46, fl - 24), "#c9b48c", 1.2); ell(sb + 40, fl - 32, 2, 2, "#1e1c1a");
+    // the ledger stand
+    const lx = 400; line([[lx, fl], [lx, fl - 62]], 4, "#6f6252"); line([[lx - 20, fl], [lx + 20, fl]], 3, "#6f6252");
+    const pages = R.pages % 40, filled = Math.floor(R.pages / 40), th = Math.min(10, 2 + pages * 0.2);
+    poly([[lx - 48, fl - 66], [lx, fl - 60], [lx + 48, fl - 66], [lx + 48, fl - 66 + th], [lx, fl - 60 + th], [lx - 48, fl - 66 + th]], "#8d7a62", 1.4);
+    poly([[lx - 46, fl - 96], [lx, fl - 88], [lx, fl - 62], [lx - 46, fl - 68]], "#f4f0e6", 1.4); poly([[lx + 46, fl - 96], [lx, fl - 88], [lx, fl - 62], [lx + 46, fl - 68]], "#f4f0e6", 1.4);
+    for (let k = 0; k < 4; k++) { line([[lx - 40, fl - 88 + k * 6], [lx - 8, fl - 82 + k * 6]], 0.6, "#8d887f"); line([[lx + 8, fl - 82 + k * 6], [lx + 40, fl - 88 + k * 6]], 0.6, "#8d887f"); }
+    line([[lx, fl - 62], [lx + 4, fl - 46]], 1.6, "#d2483a");
+    // a shelf of full ledgers
+    const shy = gy + 80; line([[ix1 - 120, shy], [ix1 - 10, shy]], 3, "#6f6252");
+    for (let k = 0; k < Math.min(6, filled); k++) poly(rect2(ix1 - 112 + k * 16, shy - 30, ix1 - 100 + k * 16, shy), k % 2 ? "#6f6252" : "#8d7a62", 1.2);
+    if (!R.pages) quietText("a page for each check-in; never a figure", lx, fl - 108, 11);
+    // the reckoning: candles lit on the gale days, one on the first of the month
+    const lit = R.reckoning === "gale" ? 4 : R.reckoning === "first" ? 1 : 0;
+    for (let k = 0; k < 4; k++) { const cx2 = lx - 70 + k * 46 + (k > 1 ? 46 : 0), cy = fl; poly(rect2(cx2 - 3, cy - 18, cx2 + 3, cy), "#ece8e0", 1); if (k < lit) flameAt(c, cx2, cy - 19, 0.24, t + k); }
+  } });
+  return out;
+}
+function ravenFront() {
+  const R = rv(), { gy, x0, x1, wall, cellar } = RP, ix0 = x0 + wall, ix1 = x1 - wall;
+  // the cellar is dim unless it's a reckoning
+  const dim = R.reckoning === "gale" ? 0.04 : R.reckoning === "first" ? 0.14 : 0.24;
+  c.fillStyle = `rgba(20,18,16,${dim})`; c.fillRect(ix0, gy + 6, ix1 - ix0, cellar - gy - 6);
+  const words = R.reckoning === "gale" ? "A gale day. The Steward's reckoning: the ledger is open and the candles lit." : R.reckoning === "first" ? "The first of the month. A candle in the Treasury." : R.post ? `${R.post === 1 ? "A letter has" : `${R.post} letters have`} come in by raven.` : "The ravens are home. No post today.";
+  c.font = `italic 14px 'IM Fell English', Georgia, serif`; c.fillStyle = "#2a2724"; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillText(words, RP.w / 2, RP.h - 14);
+}
+
 // ---------- the shared frame ----------
 type Scene = {
   spots: Spot[]; still: (r: Rooms) => void; things: (r: Rooms, t: number) => { depth: number; draw: () => void }[]; front: () => void;
@@ -1535,6 +1664,12 @@ const SCENES: Partial<Record<BuildingId, Scene>> = {
     hit: (x, y) => inR(x, y, [30, 250, 280, 368]) ? 3 : inR(x, y, [660, 250, 880, 380]) ? 2 : inR(x, y, [600, 430, 880, 600]) ? 1 : inR(x, y, [40, 300, 640, 640]) ? 0 : -1,
     stand: (i) => [[540, 474, 0.6], [768, 530, 0.6], [664, 384, 0.55], [226, 372, 0.55]][i] as [number, number, number],
     labelAt: (i) => [[580, 572], [768, 574], [762, 248], [125, 240]][i] as Pt,
+  },
+  "raven-post": {
+    spots: RAVEN_SPOTS, still: ravenStill, things: ravenThings, front: ravenFront, size: [RP.w, RP.h],
+    hit: (x, y) => x >= RP.x0 && x <= RP.x1 ? (y >= RP.roost - 150 && y < RP.gy ? 0 : y >= RP.gy && y <= RP.cellar ? 1 : -1) : -1,
+    stand: (i) => i === 0 ? [300, RP.gy - 6, 0.6] : [300, RP.cellar - 8, 0.6],
+    labelAt: (i) => i === 0 ? [640, RP.room + 70] : [640, RP.gy + 70],
   },
   "ogham-tower": {
     spots: TOWER_SPOTS, still: towerStill, things: towerThings, front: () => {}, size: [TOWER.w, TOWER.h],

@@ -93,6 +93,8 @@ export interface Save {
   wants?: Want[]; // the waiting hook in the Peddler's Market
   rags?: Rag[]; // words tied to the rag tree at the Healing Well; they fade after a moon
   winds?: Wind[]; // the words, once faded, carried on the wind until they come back
+  holes?: Hole[]; // the Raven Post's pigeonholes: admin being put off
+  reckoned?: string[]; // day keys of reckonings sat or let pass
 
 }
 
@@ -134,6 +136,9 @@ export function fadeRags(s: Save, now: number): boolean {
   s.rags = (s.rags ?? []).filter((r) => !old.includes(r));
   return true;
 }
+// A pigeonhole at the Raven Post: something you're putting off. The raven pecks at it once a week.
+export interface Hole { id: string; name: string; put: number; done?: number; dealt?: boolean; nag?: number }
+export const NAG_DAYS = 7;
 export interface Want { id: string; name: string; hung: number; done?: number; outcome?: "brought" | "let-go" }
 export const WAIT_DAYS = 28; // a moon on the hook
 export const WAIT_BONUS = 10; // Resolve, for waiting
@@ -431,6 +436,10 @@ export function merge(a: Save, b: Save): Save {
   const wants = new Map<string, Want>();
   for (const w of [...(a.wants ?? []), ...(b.wants ?? [])]) { const p = wants.get(w.id); if (!p || (w.done ?? 0) > (p.done ?? 0)) wants.set(w.id, w); }
   if (wants.size) out.wants = [...wants.values()].sort((x, y) => x.hung - y.hung);
+  const holes = new Map<string, Hole>();
+  for (const h of [...(a.holes ?? []), ...(b.holes ?? [])]) { const p = holes.get(h.id); holes.set(h.id, p ? { ...p, ...h, done: Math.max(p.done ?? 0, h.done ?? 0) || undefined, dealt: p.dealt || h.dealt, nag: Math.max(p.nag ?? 0, h.nag ?? 0) || undefined } : h); }
+  if (holes.size) out.holes = [...holes.values()].sort((x, y) => x.put - y.put);
+  const reck = [...new Set([...(a.reckoned ?? []), ...(b.reckoned ?? [])])]; if (reck.length) out.reckoned = reck.sort();
   const winds = new Map<string, Wind>();
   for (const w of [...(a.winds ?? []), ...(b.winds ?? [])]) { const p = winds.get(w.id); const ans = [...(p?.answers ?? []), ...(w.answers ?? [])].filter((x, i, arr) => arr.findIndex((y) => y.due === x.due) === i); winds.set(w.id, { ...(p ?? w), answers: ans.length ? ans : undefined }); }
   if (winds.size) out.winds = [...winds.values()].sort((x, y) => x.tied - y.tied);

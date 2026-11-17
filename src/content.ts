@@ -49,7 +49,7 @@ export const BUILDINGS: Building[] = [
   { id: "feasting-halls", name: "The Feasting Halls", blurb: "Restaurants, Fidchell Hall and the Moot Hall.", embers: ["F", "E"] },
   { id: "market-square", name: "The Market Square", blurb: "The Weaver, the Peddler's Market and the Barter Stall.", embers: ["E"] },
   { id: "healing-well", name: "The Healing Well", blurb: "The Moon Garden's rounds, the Two Stones, the Still-room and the Seaweed Baths. Every room is safe and private, and most of what you leave here fades.", embers: ["N"] },
-  { id: "raven-post", name: "The Raven Post", blurb: "Letters and admin, the Steward's desk and the Treasury.", embers: ["R"] },
+  { id: "raven-post", name: "The Raven Post", blurb: "The Hollow's post: the Roost, the Steward's desk with its pigeonholes, and the Treasury in the cellar.", embers: ["R"] },
 ];
 
 // The Dinnseanchas, the lore of places: what each place keeps, and what moves it. Read at the Scriptorium in the Bothy.
@@ -63,6 +63,7 @@ export const LORE: Partial<Record<BuildingId, { keeps: string; moves?: string }>
   "wildwood": { keeps: "A bell jar in the Glasshouse for each nature find, labelled bird, plant, flower, creature or stone. The Wort Garden's beds, the hawthorn and the lake.", moves: "Follows the real seasons. Mist and a turnip lantern at Samhain." },
   "feasting-halls": { keeps: "A mether cup on the wall pegs for each friend, by initials or nickname. An inn sign for each place you eat, brighter the more you go back. A peg in the Fidchell board for each game night. A notch on the Moot Hall's hazel tally for each time you serve. A seat by the door kept empty for the stranger.", moves: "Follows the real clock: swept in the morning, banked in the evening, full on Friday and Saturday nights." },
   "market-square": { keeps: "A row on the Weaver's belt for each piece you wear, a darn for each mend. The waiting hook: hang a want for a moon before you buy it. The Barter Stall's scale of things in and things let go, and the keeping chest. A spoke in the Wheelwright's wheel for each time you tend the bike. The cart in the Carriage House, bright when cared for.", moves: "Opens on your market day and on the old fair days, under the fair glove." },
+  "raven-post": { keeps: "The Hollow's letters come in here by raven: winds off the well, the peddler's call, the gleaning, relics waiting. A red seal on the Steward's sealing roll for each bit of admin done. The pigeonholes: put off what you're putting off, and the raven pecks at it weekly. The Treasury's ledger turns a page at each budget check-in; it never keeps a figure.", moves: "The gale days, 1 May and 1 November, and in a smaller way the first of each month: the Steward's reckoning." },
   "healing-well": { keeps: "Most things here fade. A rag on the thorn for each visit, gone in a moon; words tied to it go on the wind and come back later. The rounds: seven stations sunwise, and a white quartz pebble for each round. Herbs drying in the Still-room, a shawl on the far stone of the Two Stones, wrack on the line by the Seaweed Baths.", moves: "Follows the real moon. A candle at the dark of the moon; silver water at the full. The trout rises only now and then." },
 };
 
